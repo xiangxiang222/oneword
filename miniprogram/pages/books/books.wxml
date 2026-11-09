@@ -1,0 +1,10 @@
+<view class="page">
+  <view class="eyebrow">FIND YOUR NEXT CHAPTER</view><view class="title page-title">选一本，慢慢记。</view><view class="page-subtitle">{{total}} 本词书，从日常到更远的世界。</view>
+  <view class="search"><input placeholder="搜索词书，如 四级 / GRE" value="{{query}}" bindinput="search" confirm-type="search" /></view>
+  <view class="categories"><button wx:for="{{categories}}" wx:key="*this" class="category {{category === item ? 'category-active' : ''}}" data-category="{{item}}" bindtap="selectCategory">{{item}}</button></view>
+  <view class="notice books-notice">同一个单词，在不同词书里共享记忆。<text>内置精选可离线用，点选词书可下载完整源标签词表。</text></view>
+  <view class="book-grid"><button wx:for="{{filtered}}" wx:key="id" class="book-card {{item.active ? 'book-active' : ''}} {{!item.available ? 'book-unavailable' : ''}}" data-id="{{item.id}}" bindtap="choose"><view class="book-cover" style="background:{{item.coverColor || '#e1e7d3'}}"><view class="between"><text class="book-id serif">{{item.id}}</text><text wx:if="{{item.active}}" class="selected-mark">✓</text></view><view class="cover-title">{{item.title}}</view><view class="cover-rule"></view><view class="cover-tagline serif">one word.<text>one possibility.</text></view></view><view class="book-title">{{item.title}}</view><view class="book-count">{{item.countLabel}}</view><view wx:if="{{item.fullLabel}}" class="book-full">{{item.fullLabel}}</view><view class="book-status">{{item.downloading ? '下载中，请稍候…' : item.active ? '正在学习' : item.available ? '点此选择 ↗' : '敬请期待'}}</view></button></view>
+  <view wx:if="{{!filtered.length}}" class="empty"><view class="empty-mark serif">Aa</view><view class="empty-title">还没找到这本词书</view><view class="empty-copy">试试「四级」或选择其他分类。</view></view>
+  <view wx:if="{{storageUsage}}" class="storage-usage">本机存储 {{storageUsage.used}} / {{storageUsage.limit}} MB · 完整词表不等同于官方考试大纲</view>
+  <button class="primary back-learning" bindtap="learn">去学习当前词书 ↗</button>
+</view>

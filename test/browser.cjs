@@ -1,0 +1,85 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const {spawn} = require('node:child_process');
+const {chromium} = require('playwright-core');
+const ROOT = path.resolve(__dirname,'..');
+const output = path.join(ROOT,'test-results');
+fs.mkdirSync(output,{recursive:true});
+const remote = process.env.TEST_BASE_URL;
+const base = remote || 'http://127.0.0.1:3796/oneword/';
+const server = remote ? null : spawn(process.execPath,['server/index.js'],{cwd:ROOT,env:{...process.env,PORT:'3796'},stdio:'pipe'});
+const errors=[]; const checks=[];
+async function check(name,run){await run();checks.push(name);console.log('PASS',name)}
+async function waitServer(){for(let i=0;i<80;i++){try{if((await fetch(base+'api/health')).ok)return}catch{};await new Promise(r=>setTimeout(r,100))}throw Error('Server failed to start')}
+(async()=>{
+ let browser;
+ try {
+  await waitServer();
+  const chrome = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+  browser=await chromium.launch({headless:true,...(fs.existsSync(chrome)?{executablePath:chrome}:{}),args:['--no-sandbox']});
+  const context=await browser.newContext({viewport:{width:390,height:844}});
+  const page=await context.newPage();
+  page.on('pageerror',error=>errors.push(error.message));
+  await page.goto(base); await page.waitForSelector('.tutorial-dialog');
+  await check('Dialogs keep keyboard focus and Escape closes without losing progress',async()=>{await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.querySelector('[role=dialog]').contains(document.activeElement)),true);await page.keyboard.press('Shift+Tab');assert.equal(await page.evaluate(()=>document.querySelector('[role=dialog]').contains(document.activeElement)),true)});
+  await check('First-run tutorial has three steps and can complete',async()=>{await page.locator('.tutorial-dialog .primary-button').click();assert.match(await page.locator('#tutorial-title').innerText(),/一滑/);await page.locator('.tutorial-dialog .primary-button').click();await page.locator('.tutorial-dialog .primary-button').click();assert.equal(await page.locator('.tutorial-dialog').count(),0)});
+  await page.waitForTimeout(220);
+  await check('Home has real empty progress and no horizontal overflow at 320/390/768/1440',async()=>{for(const width of [320,390,768,1440]){await page.setViewportSize({width,height:960});await page.waitForTimeout(100);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`Overflow at ${width}`);await page.screenshot({path:path.join(output,`home-${width}.png`),fullPage:true,animations:'disabled'})}});
+  await page.setViewportSize({width:390,height:844});
+  await check('Study shows one core meaning and expansion includes example',async()=>{await page.getByRole('button',{name:'开始今日学习',exact:true}).click();await page.waitForSelector('.study-card');assert.equal(await page.locator('.core-meaning h2').count(),1);await page.getByRole('button',{name:'更多释义与例句'}).click();await page.waitForSelector('.expanded-meaning blockquote');await page.screenshot({path:path.join(output,'study-expanded-390.png'),fullPage:true,animations:'disabled'});await page.getByRole('button',{name:'收起更多释义'}).click()});
+  await check('All three ratings persist; undo restores previous card and counters',async()=>{await page.locator('.rating.unknown').click();await page.waitForTimeout(220);await page.locator('.rating.unsure').click();await page.waitForTimeout(220);await page.locator('.rating.known').click();await page.waitForTimeout(220);let state=await page.evaluate(()=>JSON.parse(localStorage.getItem('oneword.v1')));assert.equal(Object.keys(state.words).length,3);assert.deepEqual(Object.values(state.words).map(x=>x.status).sort(),['known','unknown','unsure']);await page.getByRole('button',{name:'撤销',exact:true}).click();state=await page.evaluate(()=>JSON.parse(localStorage.getItem('oneword.v1')));assert.equal(Object.keys(state.words).length,2);await page.locator('.rating.known').click();await page.waitForTimeout(220);await page.screenshot({path:path.join(output,'study-390.png'),fullPage:true,animations:'disabled'})});
+  await check('Left and right swipes submit the intended rating',async()=>{for(const [delta,rating] of [[-125,'unknown'],[125,'known']]){const idWord=await page.locator('.word-title h1').innerText();const box=await page.locator('.study-card').boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height-55);await page.mouse.down();await page.mouse.move(box.x+box.width/2+delta,box.y+box.height-55,{steps:8});await page.mouse.up();await page.waitForTimeout(250);const match=await page.evaluate(word=>{const s=JSON.parse(localStorage.getItem('oneword.v1'));return Object.entries(s.words).find(([id])=>id===word)?.[1]},idWord.toLowerCase());assert.equal(match?.status,rating)}});
+  await page.getByRole('button',{name:'退出学习'}).click();
+  await check('Collections search, details and practice use saved data',async()=>{await page.locator('.mobile-nav').getByRole('button',{name:'词集',exact:true}).click();assert.ok(await page.locator('.word-row').count()>=1);await page.locator('.word-row').first().click();await page.waitForSelector('.detail-dialog');assert.ok(await page.locator('.detail-core h3').innerText());await page.getByRole('button',{name:'关闭单词详情'}).click();await page.getByRole('textbox',{name:'搜索词集'}).fill('zzzznotfound');assert.match(await page.locator('.empty-state h3').innerText(),/没有匹配/);await page.getByRole('textbox',{name:'搜索词集'}).fill('');await page.screenshot({path:path.join(output,'collection-390.png'),fullPage:true,animations:'disabled'})});
+  await check('Book counts are actual, SAT unavailable, switching preserves words',async()=>{await page.locator('.mobile-nav').getByRole('button',{name:'词书',exact:true}).click();assert.equal(await page.locator('.book-item').count(),10);await page.screenshot({path:path.join(output,'books-390.png'),fullPage:true,animations:'disabled'});await page.locator('.book-item').filter({hasText:'小学'}).click();const s=await page.evaluate(()=>JSON.parse(localStorage.getItem('oneword.v1')));assert.equal(s.bookId,'primary');assert.equal(Object.keys(s.words).length,5)});
+  await check('Recall-first mode locks rating until reveal; settings persist on reload',async()=>{await page.getByRole('button',{name:'打开学习设置'}).click();await page.getByRole('combobox',{name:'每日新词数量'}).selectOption('10');await page.getByRole('switch',{name:'先回忆再看答案'}).click();await page.getByRole('combobox',{name:'朗读口音'}).selectOption('uk');await page.getByRole('button',{name:'关闭设置'}).click();await page.reload();await page.getByRole('button',{name:'继续今日学习',exact:true}).click();assert.equal(await page.locator('.core-meaning').count(),0);assert.equal(await page.locator('.rating.known').isDisabled(),true);await page.locator('.reveal-button').click();assert.equal(await page.locator('.rating.known').isDisabled(),false);await page.getByRole('button',{name:'退出学习'}).click();const s=await page.evaluate(()=>JSON.parse(localStorage.getItem('oneword.v1')));assert.equal(s.settings.dailyGoal,10);assert.equal(s.settings.accent,'uk')});
+  await check('Backup export downloads parseable state; valid restore replaces after confirmation',async()=>{await page.getByRole('button',{name:'打开学习设置'}).click();const downloadPromise=page.waitForEvent('download');await page.getByRole('button',{name:'导出备份',exact:true}).click();const download=await downloadPromise;const file=path.join(output,'backup.json');await download.saveAs(file);const backup=JSON.parse(fs.readFileSync(file,'utf8'));assert.equal(backup.product,'oneword');assert.equal(backup.format,'oneword.backup');assert.deepEqual(backup.bookIds,[]);backup.state.settings.dailyGoal=15;page.once('dialog',dialog=>dialog.accept());await page.locator('input[type=file]').setInputFiles({name:'restore.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(backup))});await page.waitForTimeout(250);assert.equal((await page.evaluate(()=>JSON.parse(localStorage.getItem('oneword.v1')))).settings.dailyGoal,15);if(await page.locator('.settings-dialog').count())await page.getByRole('button',{name:'关闭设置'}).click()});
+  await check('Memory displays persisted actual activity and no NaN',async()=>{await page.locator('.mobile-nav').getByRole('button',{name:'记忆',exact:true}).click();await page.waitForSelector('.memory-page');assert.doesNotMatch(await page.locator('.memory-page').innerText(),/NaN|undefined/);await page.screenshot({path:path.join(output,'memory-390.png'),fullPage:true,animations:'disabled'})});
+  await check('Full book download caches actual vocabulary and survives offline reload',async()=>{
+   await page.locator('.mobile-nav').getByRole('button',{name:'词书',exact:true}).click();
+   await page.locator('.book-item').filter({hasText:'大学四级'}).getByRole('button',{name:'下载完整词库',exact:true}).click();
+   await page.locator('.download-dialog').getByRole('button',{name:'下载完整词库',exact:true}).click();
+   await page.waitForSelector('.home-page');
+   assert.match(await page.locator('.book-summary').innerText(),/3812/);
+   await page.reload();await page.waitForSelector('.book-summary');assert.match(await page.locator('.book-summary').innerText(),/3812/);
+   await page.evaluate(async()=>{await navigator.serviceWorker.ready;if(!navigator.serviceWorker.controller)await new Promise(resolve=>navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}))});
+   await context.setOffline(true);await page.reload();await page.waitForSelector('.home-page');assert.match(await page.locator('.book-summary').innerText(),/3812/);
+   await page.getByRole('button',{name:'继续今日学习',exact:true}).click();assert.ok(await page.locator('.study-card').isVisible());await page.getByRole('button',{name:'退出学习'}).click();
+   await context.setOffline(false);
+  });
+  await check('Native-format full-book backup restores on a fresh device and legacy exports still work',async()=>{
+   const selectedIds = new Set(require('../data/vocabulary.js').words.map(word=>word.id));
+   const core = require('../shared/core.js');
+   const complete = require('../data/full-books/cet4.json');
+   core.installBook(complete);
+   const outside = complete.words.find(word=>!selectedIds.has(word.id));assert.ok(outside);
+   const current = await page.evaluate(()=>JSON.parse(localStorage.getItem('oneword.v1')));
+   const restore = core.rateWord(core.restoreState(current),outside.id,'known',Date.now());
+   const portable = {format:'oneword.backup',version:1,state:restore,bookIds:['cet4']};
+   const freshContext = await browser.newContext({viewport:{width:390,height:844}});
+   const fresh = await freshContext.newPage();fresh.on('pageerror',error=>errors.push(error.message));
+   await fresh.goto(base);await fresh.waitForSelector('.tutorial-dialog');await fresh.getByRole('button',{name:'跳过，直接体验',exact:true}).click();
+   await fresh.getByRole('button',{name:'打开学习设置'}).click();
+   fresh.once('dialog',dialog=>dialog.accept());
+   await fresh.locator('input[type=file]').setInputFiles({name:'native.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(portable))});
+   await fresh.waitForSelector('.settings-dialog',{state:'detached'});
+   assert.match(await fresh.locator('.book-summary').innerText(),/3812/);
+   assert.equal((await fresh.evaluate(()=>JSON.parse(localStorage.getItem('oneword.v1')))).words[outside.id].status,'known');
+   await fresh.reload();await fresh.waitForSelector('.home-page');assert.match(await fresh.locator('.book-summary').innerText(),/3812/);
+   await fresh.getByRole('button',{name:'打开学习设置'}).click();fresh.once('dialog',dialog=>dialog.accept());
+   await fresh.locator('input[type=file]').setInputFiles({name:'legacy.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({product:'oneword',catalogBooks:['cet4'],state:restore}))});
+   await fresh.waitForSelector('.settings-dialog',{state:'detached'});assert.equal((await fresh.evaluate(()=>JSON.parse(localStorage.getItem('oneword.v1')))).words[outside.id].status,'known');
+   await fresh.getByRole('button',{name:'打开学习设置'}).click();
+   const beforeCancel=await fresh.evaluate(()=>localStorage.getItem('oneword.v1'));
+   const canceled={...portable,state:{...restore,settings:{...restore.settings,dailyGoal:5}}};
+   fresh.once('dialog',dialog=>dialog.dismiss());await fresh.locator('input[type=file]').setInputFiles({name:'cancel.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(canceled))});
+   await fresh.waitForTimeout(200);assert.equal(await fresh.evaluate(()=>localStorage.getItem('oneword.v1')),beforeCancel);
+   await fresh.keyboard.press('Escape');assert.equal(await fresh.locator('.settings-dialog').count(),0);
+   await freshContext.close();
+  });
+  await check('No JavaScript runtime errors',async()=>assert.deepEqual(errors,[]));
+  fs.writeFileSync(path.join(output,'browser-report.json'),JSON.stringify({ok:true,checks,errors},null,2));
+  console.log(`${checks.length} browser checks passed.`);
+ } finally {if(browser)await browser.close();server?.kill('SIGTERM')}
+})().catch(error=>{console.error(error);process.exitCode=1;server?.kill('SIGTERM')});

@@ -1,0 +1,26 @@
+<view class="page home">
+  <view class="between masthead"><view class="brand">一词<text class="brand-en serif">oneword.</text></view><text class="date">{{today}}</text></view>
+  <view wx:if="{{recovery.warning}}" class="notice recovery-notice">{{recovery.warning}}</view>
+  <view class="intro"><view class="eyebrow">LESS, BUT BETTER</view><view class="title greeting">少记一点，<view>记得更久。</view></view><view class="intro-copy">每次一个核心意，给记忆一点空间。</view></view>
+  <view class="between section-heading"><text class="eyebrow">TODAY'S LITTLE PROGRESS</text><text class="small muted">{{stats.streak}} 天相伴</text></view>
+  <view class="daily-grid">
+    <view class="daily-cell"><view class="daily-number serif">{{stats.todayNew}}<text class="daily-denominator"> / {{stats.dailyGoal}}</text></view><view class="daily-label"><view class="dot lime"></view>今日新学</view></view>
+    <view class="daily-cell"><view class="daily-number serif">{{stats.dueCount}}<text class="daily-denominator"> 词</text></view><view class="daily-label"><view class="dot green"></view>待复习</view></view>
+  </view>
+  <button class="hero-card" bindtap="start" aria-label="开始今日学习">
+    <view class="between"><view class="hero-kicker">A WORD AT A TIME</view><view class="hero-orbit">a</view></view>
+    <view class="hero-title">{{stats.todayRemaining ? '继续，向前一词。' : '今天的目标，完成了。'}}</view>
+    <view class="hero-copy">{{stats.dueCount ? '先复习，再认识一点新世界。' : '不求一口气很多，只求每一次记住。'}}</view>
+    <view class="between hero-bottom"><view class="hero-button">{{stats.todayRemaining ? '开始学习' : '看看学习成果'}}<text>↗</text></view><text class="hero-estimate">{{stats.todayRemaining}} 词在等你</text></view>
+  </button>
+  <view wx:if="{{pending.count}}" class="pending-note"><view class="pending-dot"></view><view><view>{{pending.count}} 词正在短时巩固 · {{pending.nextLabel}}再见</view><view class="pending-sub">不认识约 5 分钟后，不确定约 15 分钟后复习。</view></view></view>
+  <view class="between book-section"><text class="section-title">正在读的词书</text><button class="link" bindtap="books">换一本 ↗</button></view>
+  <button class="current-book" bindtap="books"><view class="book-spine"><text class="book-cover-name">{{book.title}}</text><text class="book-cover-en serif">words
+to keep.</text></view><view class="book-info"><text class="badge">{{book.category}}</text><view class="book-name">{{book.title}}</view><view class="book-sub muted">已学 {{stats.learnedCount}} / {{stats.bookTotal}} 词</view><view class="progress-track"><view class="progress-fill" style="{{progressStyle}}"></view></view><view class="small muted">一点一点，积少成多。</view></view></button>
+  <view class="gentle-note"><text class="note-mark serif">“</text><text>认识不是终点，恰好出现的下一次，
+才让单词留下来。</text></view>
+</view>
+<view wx:if="{{tutorial}}" class="sheet-mask" bindtap="dismissTutorial"><view class="sheet tutorial" catchtap="noop"><view class="between"><text class="eyebrow">HELLO, ONE WORD</text><button class="link" bindtap="dismissTutorial">跳过</button></view><view class="sheet-title">给单词一个简单的回答。</view><view class="sheet-copy tutorial-copy">每张卡片只显示一个核心意思。
+凭真实记忆判断，复习会按你的回答安排。</view><view class="gesture-demo"><view class="gesture-side"><text>←</text><text>左滑 · 不认识</text></view><view class="mini-word serif">bloom<text>开花</text></view><view class="gesture-side"><text>→</text><text>右滑 · 认识</text></view></view><view class="notice">有点眼熟？选「不确定」就好。
+点「更多词义」展开；误滑可以撤销。
+也可以在「我的」开启先回忆，再揭晓。</view><button class="primary tutorial-start" bindtap="beginTutorial">明白了，开始第一词 ↗</button></view></view>
