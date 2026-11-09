@@ -58,6 +58,7 @@ async function authenticate(page, name, mode = 'login', options = {}) {
     return;
   }
   await page.waitForFunction(expected => document.querySelector('.home-page .account-heading h3')?.textContent === expected, name);
+  await account.locator('.account-form-wrap').waitFor({ state: 'hidden' });
   await synced(page);
 }
 async function synced(page) {
@@ -75,7 +76,9 @@ async function synced(page) {
 async function sync(page) {
   const button = panel(page).getByRole('button', { name: '立即同步', exact: true });
   await button.waitFor();
+  const response = page.waitForResponse(result => result.url().includes('/api/sync') && result.request().method() === 'GET' && result.status() === 200);
   await button.click();
+  await response;
   await synced(page);
 }
 async function learn(page, rating = 'known') {
