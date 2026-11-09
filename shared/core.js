@@ -7,6 +7,11 @@ const MINUTE = 60000;
 const DAY = 86400000;
 const INTERVALS = [1, 2, 4, 7, 15, 30, 60, 90];
 const STATUSES = ['known', 'unknown', 'unsure'];
+const LEARNING_ORDERS = [
+  { id: 'adaptive', label: '记忆优先', description: '先复习到期词，优先逾期和薄弱词；新词沿用词书编排。' },
+  { id: 'alphabetical', label: '字母顺序', description: '按 A–Z 排列新词和到期复习词，仍先复习再学新词。' },
+  { id: 'random', label: '随机顺序', description: '每天混排新词和到期复习词，同日顺序稳定，仍先复习。' }
+];
 const MAX_HISTORY = 20;
 
 function timestamp(value) {
@@ -30,7 +35,7 @@ function createState(now) {
     version: 1,
     bookId: 'cet4',
     createdAt: at,
-    settings: { dailyGoal: 20, recallFirst: false, sound: false, tutorialComplete: false, accent: 'us' },
+    settings: { dailyGoal: 20, recallFirst: false, sound: false, tutorialComplete: false, accent: 'us', learningOrder: 'adaptive' },
     words: {},
     daily: {},
     history: []
@@ -48,19 +53,74 @@ function getCollection(state, status) {
     .sort((a, b) => (a.progress.dueAt - b.progress.dueAt) || a.word.localeCompare(b.word));
 }
 
+function compareWords(a, b) {
+  // All dictionary IDs are lowercase English. A lexical comparison is identical
+  // across JavaScript runtimes and does not depend on the device's locale.
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function learningOrder(state, override) {
+  const order = override !== undefined ? override : state.settings.learningOrder === undefined ? 'adaptive' : state.settings.learningOrder;
+  if (!LEARNING_ORDERS.some(item => item.id === order)) throw new Error('请选择记忆优先、字母顺序或随机顺序');
+  return order;
+}
+
+function randomRank(value) {
+  // A stable keyed rank, rather than reshuffling on every call, preserves the
+  // relative order of the remaining words after a rating or a page reload.
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) hash = Math.imul(hash ^ value.charCodeAt(i), 16777619);
+  hash = Math.imul(hash ^ (hash >>> 16), 0x85ebca6b);
+  hash = Math.imul(hash ^ (hash >>> 13), 0xc2b2ae35);
+  return (hash ^ (hash >>> 16)) >>> 0;
+}
+
+function orderIds(ids, state, now, order, fresh) {
+  const ordered = ids.slice();
+  if (order === 'alphabetical') return ordered.sort(compareWords);
+  if (order === 'random') {
+    const seed = String(state.createdAt) + '|' + dateKey(now) + '|' + state.bookId + '|';
+    const ranks = Object.create(null);
+    ordered.forEach(id => { ranks[id] = randomRank(seed + id); });
+    return ordered.sort((a, b) => ranks[a] - ranks[b] || compareWords(a, b));
+  }
+  if (fresh) return ordered;
+  const weakness = { unknown: 0, unsure: 1, known: 2 };
+  return ordered.sort((a, b) => {
+    const pa = state.words[a];
+    const pb = state.words[b];
+    const aDue = pa.dueAt <= now;
+    const bDue = pb.dueAt <= now;
+    if (aDue !== bDue) return aDue ? -1 : 1;
+    if (!aDue) return pa.dueAt - pb.dueAt || compareWords(a, b);
+    // Relative overdue time is an explainable priority heuristic. It is not an
+    // estimated forgetting probability or a fitted memory model.
+    const urgencyA = (now - pa.dueAt) / Math.max(pa.interval, 5 * MINUTE);
+    const urgencyB = (now - pb.dueAt) / Math.max(pb.interval, 5 * MINUTE);
+    return urgencyB - urgencyA || weakness[pa.status] - weakness[pb.status]
+      || pb.lapses - pa.lapses || pa.dueAt - pb.dueAt || compareWords(a, b);
+  });
+}
+
 function makeSession(state, options) {
   const opts = options || {};
   const now = timestamp(opts.now);
   const mode = opts.mode || 'today';
   const limit = Math.min(200, Math.max(1, Number(opts.limit) || 50));
-  if (STATUSES.includes(mode) || mode === 'all') return getCollection(state, mode).slice(0, limit);
+  const order = learningOrder(state, opts.learningOrder);
+  if (STATUSES.includes(mode) || mode === 'all') {
+    const ids = getCollection(state, mode).map(word => word.id);
+    return orderIds(ids, state, now, order, false).slice(0, limit)
+      .map(id => Object.assign({}, wordMap[id], { progress: state.words[id] }));
+  }
   if (!['today', 'review', 'new'].includes(mode)) throw new Error('学习模式无效');
   const book = bookFor(state);
   const day = state.daily[dateKey(now)] || dailyEntry();
-  const due = book.wordIds.filter(id => state.words[id] && state.words[id].dueAt <= now)
-    .sort((a, b) => state.words[a].dueAt - state.words[b].dueAt);
+  const due = orderIds(book.wordIds.filter(id => state.words[id] && state.words[id].dueAt <= now), state, now, order, false);
   const room = Math.max(0, state.settings.dailyGoal - day.newWordIds.length);
-  const fresh = book.wordIds.filter(id => !state.words[id]).slice(0, room);
+  // Order the full unseen pool before taking today's quota. Otherwise random
+  // mode would merely shuffle the first few words in the original book.
+  const fresh = orderIds(book.wordIds.filter(id => !state.words[id]), state, now, order, true).slice(0, room);
   const ids = mode === 'review' ? due : mode === 'new' ? fresh : due.concat(fresh);
   return ids.slice(0, limit).map(id => Object.assign({}, wordMap[id], { progress: state.words[id] || null }));
 }
@@ -131,6 +191,8 @@ function updateSettings(state, patch) {
       if (!Number.isInteger(patch[key]) || patch[key] < 1 || patch[key] > 200) throw new Error('每日新词数需为 1–200 的整数');
     } else if (key === 'accent') {
       if (!['us', 'uk'].includes(patch[key])) throw new Error('请选择美式或英式朗读');
+    } else if (key === 'learningOrder') {
+      if (!LEARNING_ORDERS.some(item => item.id === patch[key])) throw new Error('请选择记忆优先、字母顺序或随机顺序');
     } else if (['recallFirst', 'sound', 'tutorialComplete'].includes(key)) {
       if (typeof patch[key] !== 'boolean') throw new Error('学习设置值无效');
     } else throw new Error('未知的学习设置');
@@ -346,4 +408,4 @@ function installBook(payload) {
   return book;
 }
 
-module.exports = { createState, makeSession, rateWord, undo, getStats, setBook, getCollection, updateSettings, restoreState, importState: restoreState, validateBook, installBook, dateKey, INTERVALS, DAY, MINUTE };
+module.exports = { createState, makeSession, rateWord, undo, getStats, setBook, getCollection, updateSettings, restoreState, importState: restoreState, validateBook, installBook, dateKey, INTERVALS, LEARNING_ORDERS, DAY, MINUTE };
