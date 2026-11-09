@@ -1,6 +1,6 @@
 # 本轮验收记录
 
-日期：2026-11-08（America/New_York）。本文件记录本地可复现结果；GitHub PR、线上部署状态以对应 Actions 与实际健康检查为准，不把源码完成等同微信审核上线。
+日期：2026-11-09（America/New_York）。本文件记录本地及公网验收结果；网页部署与微信审核发布分别记录。
 
 ## 已通过
 
@@ -37,3 +37,12 @@
 - 持续词义校订和商业使用时的数据来源核查；完整标签词书不等于现行官方考试大纲。
 
 本轮未获得独立微信发布凭据，因此没有声称生成正式体验版二维码或通过微信审核。网页部署与上述微信正式发布流程分别记录。
+
+## 网页首次上线验收
+
+- [产品 PR #1](https://github.com/xiangxiang222/oneword/pull/1) 已通过检查并合并，功能提交 `ea76ac2e9f3f3263eea12f31b8719a058ac376f8`。
+- [自动部署](https://github.com/xiangxiang222/oneword/actions/runs/42557762572) 成功；首个线上 releaseId `20261109034132-ea76ac2`。
+- HTTPS [一词网页](https://togetherbetter.cn/oneword/) 与健康、词书接口均返回 200；公网重新运行全部 14 组 Chromium 检查通过，包括完整书下载、断网重开及新设备备份恢复。
+- PM2 的 `oneword`、`marathon`、`beiyexing` 均 online；参考项目首页及 `/marathon/` 继续返回 200。
+- 用户确认尚未申请独立 AppID，先上线网页版；原生小程序保留可导入开发者工具的版本。
+- 本机到 GitHub Git HTTP 连接不稳定，本次通过 GitHub Git Database API 推送，校验 blob/tree/commit SHA 与本地一致；没有把访问令牌写入仓库。
