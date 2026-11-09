@@ -8,3 +8,10 @@ function patch(text){return execFileSync('python3',['-c',`import runpy,sys; modu
 test('nginx mounts OneWord independently in HTTP and HTTPS without changing other upstreams',()=>{const out=patch(fixture);assert.equal(out.split('location /oneword/').length-1,2);assert.equal(out.split('proxy_pass http://127.0.0.1:3790;').length-1,2);assert.equal(out.split('proxy_pass http://127.0.0.1:3780;').length-1,2);assert.equal(out.replace(/    # OneWord:[\s\S]*?    location \/marathon\//g,'    location /marathon/'),fixture)});
 test('nginx patch is idempotent and rejects partial configurations',()=>{const once=patch(fixture);assert.equal(patch(once),once);const partial=once.replace(/    # OneWord:[\s\S]*?(?=    location \/marathon\/)/,'');assert.throws(()=>patch(partial),/Partial OneWord/)});
 test('nginx patch refuses unknown host layouts',()=>assert.throws(()=>patch('server { listen 443 ssl; }'),/Expected nginx locations/));
+test('nginx upgrades both legacy OneWord request limits without touching other locations',()=>{
+  const current=patch(fixture);
+  const legacy=current.replaceAll('        client_max_body_size 6m;\n','');
+  assert.equal(patch(legacy),current);
+  assert.equal(patch(current.replaceAll('client_max_body_size 6m;','client_max_body_size 1m;')),current);
+  assert.throws(()=>patch(legacy.replaceAll('http://127.0.0.1:3795;','http://127.0.0.1:3999;')),/Unknown OneWord upstream/);
+});
