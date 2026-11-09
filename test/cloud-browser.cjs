@@ -222,7 +222,7 @@ async function cleanup() {
       await a.context.setOffline(false);
       await Promise.all([sync(a.page), sync(twin)]);
       await sync(a.page); await sync(twin);
-      await a.context.unroute('**/api/sync*');
+      await a.context.unrouteAll({ behavior: 'wait' });
       const cloud = await snapshot(a.context);
       assert.equal(Object.keys(cloud.state.words).length, 6);
       assert.equal(Object.values(cloud.state.daily).reduce((sum, day) => sum + day.answerCount, 0), 6);
