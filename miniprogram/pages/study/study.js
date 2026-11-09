@@ -1,13 +1,16 @@
 const store = require('../../utils/store')
 const MODE_LABELS = { today: '今日学习', review: '到期复习', unknown: '不认识词集', unsure: '不确定词集', known: '认识词集' }
 Page({
-  data: { word: null, mode: 'today', modeLabel: '', bookTitle: '', index: 0, total: 0, done: false, revealed: true, expanded: false, canUndo: false, dragStyle: '', swipeLabel: '', stats: {}, sessionCounts: { known: 0, unsure: 0, unknown: 0 }, nextDueLabel: '', progressStyle: 'width:0%', busy: false, pending: {} },
+  data: { word: null, mode: 'today', modeLabel: '', orderId: 'adaptive', orderLabel: '记忆优先', bookTitle: '', index: 0, total: 0, done: false, revealed: true, expanded: false, canUndo: false, dragStyle: '', swipeLabel: '', stats: {}, sessionCounts: { known: 0, unsure: 0, unknown: 0 }, nextDueLabel: '', progressStyle: 'width:0%', busy: false, pending: {} },
   onLoad(options) {
     const mode = MODE_LABELS[options.mode] ? options.mode : 'today'
-    this.queue = store.core.makeSession(store.read(), { mode, limit: 50 })
+    const state = store.read()
+    const orderId = state.settings.learningOrder || 'adaptive'
+    const order = store.core.LEARNING_ORDERS.find(item => item.id === orderId) || store.core.LEARNING_ORDERS[0]
+    this.queue = store.core.makeSession(state, { mode, limit: 50 })
     this.actions = []
     this.cursor = 0
-    this.setData({ mode, modeLabel: MODE_LABELS[mode], bookTitle: store.currentBook().title, total: this.queue.length })
+    this.setData({ orderId: order.id, orderLabel: order.label, mode, modeLabel: MODE_LABELS[mode], bookTitle: store.currentBook().title, total: this.queue.length })
     this.present()
   },
   onShow() {
@@ -79,9 +82,11 @@ Page({
   touchCancel() { this.touchOrigin = null; this.setData({ dragStyle: '', swipeLabel: '' }) },
   home() { wx.switchTab({ url: '/pages/index/index' }) },
   nextGroup() {
-    this.queue = store.core.makeSession(store.read(), { mode: this.data.mode, limit: 50 })
+    const state = store.read()
+    const order = store.core.LEARNING_ORDERS.find(item => item.id === (state.settings.learningOrder || 'adaptive')) || store.core.LEARNING_ORDERS[0]
+    this.queue = store.core.makeSession(state, { mode: this.data.mode, limit: 50 })
     this.actions = []; this.cursor = 0
-    this.setData({ total: this.queue.length })
+    this.setData({ total: this.queue.length, orderId: order.id, orderLabel: order.label })
     this.present()
   },
   onHide() { if (this.refreshTimer) clearInterval(this.refreshTimer); this.refreshTimer = null },

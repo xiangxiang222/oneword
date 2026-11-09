@@ -1,15 +1,22 @@
 const store = require('../../utils/store')
 Page({
-  data: { stats: {}, settings: {}, bars: [], goalOptions: [5, 10, 15, 20, 30, 40, 50, 75, 100], goalIndex: 3, panel: '', importText: '', importError: '', restoring: false, recovery: {}, storageUsage: null },
+  data: { stats: {}, settings: {}, bars: [], goalOptions: [5, 10, 15, 20, 30, 40, 50, 75, 100], goalIndex: 3, orderOptions: store.core.LEARNING_ORDERS, orderIndex: 0, orderDescription: '', panel: '', importText: '', importError: '', restoring: false, recovery: {}, storageUsage: null },
   onShow() { this.refresh(); if (this.refreshTimer) clearInterval(this.refreshTimer); this.refreshTimer = setInterval(() => this.refresh(), 30000) },
   refresh() {
     const state = store.read()
     const stats = store.core.getStats(state)
     const max = Math.max(1, ...stats.last7Days.map(day => day.total))
+    const orderOptions = store.core.LEARNING_ORDERS
+    const orderIndex = Math.max(0, orderOptions.findIndex(order => order.id === (state.settings.learningOrder || 'adaptive')))
     const goalOptions = Array.from(new Set(this.data.goalOptions.concat(state.settings.dailyGoal))).sort((a, b) => a - b)
-    this.setData({ stats, recovery: store.recoveryInfo(), storageUsage: store.storageUsage(), settings: state.settings, goalOptions, bars: stats.last7Days.map(day => ({ ...day, barStyle: 'height:' + (day.total ? Math.max(7, day.total / max * 120) : 3) + 'rpx' })), goalIndex: goalOptions.indexOf(state.settings.dailyGoal) })
+    this.setData({ stats, recovery: store.recoveryInfo(), storageUsage: store.storageUsage(), settings: state.settings, orderOptions, orderIndex, orderDescription: orderOptions[orderIndex].description, goalOptions, bars: stats.last7Days.map(day => ({ ...day, barStyle: 'height:' + (day.total ? Math.max(7, day.total / max * 120) : 3) + 'rpx' })), goalIndex: goalOptions.indexOf(state.settings.dailyGoal) })
   },
   goal(event) { if (store.apply(state => store.core.updateSettings(state, { dailyGoal: this.data.goalOptions[Number(event.detail.value)] }))) this.refresh() },
+  learningOrder(event) {
+    const order = this.data.orderOptions[Number(event.detail.value)]
+    if (!order) return
+    if (store.apply(state => store.core.updateSettings(state, { learningOrder: order.id }))) { this.refresh(); wx.showToast({ title: '已保存，下次开始学习生效', icon: 'none' }) }
+  },
   recall(event) { if (store.apply(state => store.core.updateSettings(state, { recallFirst: event.detail.value }))) this.refresh() },
   tutorial() { store.resetTutorial(); wx.switchTab({ url: '/pages/index/index' }) },
   openPanel(event) { this.setData({ panel: event.currentTarget.dataset.panel, importError: '' }) },

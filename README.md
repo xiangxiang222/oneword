@@ -4,12 +4,13 @@
 
 - 默认一个核心义，可展开其他释义与例句；可开启「先回忆，再揭晓」。
 - 左滑不认识、右滑认识，按钮支持不确定；可撤销，词集随最新判断自动整理。
-- 先复习到期词，再学新词；每天新词目标可调，跨词书共享记忆。
+- 支持记忆优先、字母 A–Z、每日稳定随机三种学习顺序；均先复习到期词，再学新词，跨词书共享记忆。
+- 首页和学习设置均可选择顺序，下一组生效，备份保留偏好；每天新词目标可调。
 - 不认识 5 分钟、不确定 15 分钟重见；到期成功回忆按 1、2、4、7、15、30、60、90 天递进。提前练习不会刷高记忆等级。此为透明的间隔启发式，非 FSRS 拟合或遗忘率保证。
 - 无需注册，学习记录保存在设备；网页和微信支持兼容 JSON 备份恢复。
 - 9 本离线精选各 180 词；还可下载完整源标签词库后离线使用。小学、初中、高中、四级、六级、考研、雅思、托福、GRE。SAT 尚在整理，未假称已收录。
 
-网页已上线：<https://togetherbetter.cn/oneword/>；仓库：<https://github.com/xiangxiang222/oneword>（私有）。[产品 PR #1](https://github.com/xiangxiang222/oneword/pull/1) 已合并并自动部署，55 项测试与 14 组公网页面检查通过。
+网页已上线：<https://togetherbetter.cn/oneword/>；仓库：<https://github.com/xiangxiang222/oneword>（私有）。[产品 PR #1](https://github.com/xiangxiang222/oneword/pull/1) 已合并并自动部署，当前本地验证为 66 项测试和 18 组浏览器检查通过。
 
 [手机首页](docs/previews/home-mobile.png) · [学习词卡](docs/previews/study-mobile.png) · [词书页](docs/previews/books-mobile.png) · [桌面首页](docs/previews/home-desktop.png)
 

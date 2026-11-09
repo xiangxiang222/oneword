@@ -7,6 +7,7 @@
     <view class="daily-cell"><view class="daily-number serif">{{stats.todayNew}}<text class="daily-denominator"> / {{stats.dailyGoal}}</text></view><view class="daily-label"><view class="dot lime"></view>今日新学</view></view>
     <view class="daily-cell"><view class="daily-number serif">{{stats.dueCount}}<text class="daily-denominator"> 词</text></view><view class="daily-label"><view class="dot green"></view>待复习</view></view>
   </view>
+  <picker range="{{orderOptions}}" range-key="label" value="{{orderIndex}}" bindchange="learningOrder"><view class="learning-order"><view><text class="order-caption">学习顺序</text><text class="order-label">{{orderLabel}}</text></view><text class="order-change">切换 ›</text></view></picker>
   <button class="hero-card" bindtap="start" aria-label="开始今日学习">
     <view class="between"><view class="hero-kicker">A WORD AT A TIME</view><view class="hero-orbit">a</view></view>
     <view class="hero-title">{{stats.todayRemaining ? '继续，向前一词。' : '今天的目标，完成了。'}}</view>

@@ -1,6 +1,6 @@
 const store = require('../../utils/store')
 Page({
-  data: { stats: {}, book: {}, tutorial: false, today: '', progressStyle: '', pending: {}, recovery: {} },
+  data: { stats: {}, book: {}, tutorial: false, today: '', progressStyle: '', pending: {}, recovery: {}, orderOptions: store.core.LEARNING_ORDERS, orderIndex: 0, orderLabel: '记忆优先' },
   onShow() {
     this.refresh()
     this.setData({ tutorial: !store.tutorialSeen() })
@@ -11,7 +11,14 @@ Page({
     const state = store.read()
     const stats = store.core.getStats(state)
     const date = new Date()
-    this.setData({ stats, book: store.currentBook(state), today: (date.getMonth() + 1) + ' 月 ' + date.getDate() + ' 日', pending: store.pendingInfo(state), recovery: store.recoveryInfo(), progressStyle: 'width:' + stats.progress + '%' })
+    const orderOptions = store.core.LEARNING_ORDERS
+    const orderIndex = Math.max(0, orderOptions.findIndex(order => order.id === (state.settings.learningOrder || 'adaptive')))
+    this.setData({ orderOptions, orderIndex, orderLabel: orderOptions[orderIndex].label, stats, book: store.currentBook(state), today: (date.getMonth() + 1) + ' 月 ' + date.getDate() + ' 日', pending: store.pendingInfo(state), recovery: store.recoveryInfo(), progressStyle: 'width:' + stats.progress + '%' })
+  },
+  learningOrder(event) {
+    const order = this.data.orderOptions[Number(event.detail.value)]
+    if (!order) return
+    if (store.apply(state => store.core.updateSettings(state, { learningOrder: order.id }))) { this.refresh(); wx.showToast({ title: '已保存，下次开始学习生效', icon: 'none' }) }
   },
   start() {
     this.refresh()

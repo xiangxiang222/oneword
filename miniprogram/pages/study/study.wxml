@@ -4,7 +4,7 @@
   <block wx:if="{{!done}}">
     <view class="between study-subheading"><text class="pill">{{word.progress ? '温故' : '知新'}}</text><button class="undo-button {{!canUndo ? 'undo-disabled' : ''}}" disabled="{{!canUndo || busy}}" bindtap="undo">↶ 撤销上一词</button></view>
     <view class="card-stack"><view class="card-under"></view><view class="word-card" style="{{dragStyle}}" bindtouchstart="touchStart" bindtouchmove="touchMove" bindtouchend="touchEnd" bindtouchcancel="touchCancel">
-      <view class="card-kicker">{{modeLabel}}<text wx:if="{{swipeLabel}}" class="swipe-label">{{swipeLabel}}</text></view>
+      <view class="card-kicker"><view>{{modeLabel}}<text class="study-order"> · {{orderLabel}}</text></view><text wx:if="{{swipeLabel}}" class="swipe-label">{{swipeLabel}}</text></view>
       <view class="main-word serif {{word.word.length > 13 ? 'long-word' : ''}}">{{word.word}}</view><view class="phonetic">{{word.phonetic ? '/' + word.phonetic + '/' : ' '}}</view>
       <view class="meaning-divider"></view>
       <block wx:if="{{revealed}}"><view class="core-label">只记这一个核心意</view><view class="core-meaning"><text class="word-pos">{{word.pos}}</text>{{word.coreMeaning}}</view><button wx:if="{{word.meanings.length > 1 || word.example}}" class="expand-button" bindtap="expand">{{expanded ? '收起词义 −' : '更多词义与用法 ＋'}}</button></block>
