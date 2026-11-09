@@ -1,6 +1,8 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Icon from './Icon.vue'
+import AccountPanel from './AccountPanel.vue'
+import { connectCloud } from './cloud.js'
 import core from './generated/core.js'
 import vocabulary from './generated/vocabulary.js'
 import { downloadBook, installedBooks, restoreBookManifest } from './catalog.js'
@@ -33,7 +35,19 @@ function loadState() {
   }
 }
 const state = ref(loadState())
-function save(next) {
+let cloud = null
+let lastRating = null
+const cloudStatus = ref({user:null,phase:'guest',message:'游客模式 · 记录保存在本机'})
+function save(next, fromCloud=false, applicationId) {
+  if (!fromCloud && cloud) {
+    try {
+      const stored=JSON.parse(localStorage.getItem('oneword.cloud.identity.v1') || 'null')
+      if ((stored?.user?.id || null)!==(cloud.getStatus().user?.id || null)) {
+        notify('其他页面已切换账号，请刷新后继续学习')
+        return false
+      }
+    } catch { /* The normal durable write below reports unavailable storage. */ }
+  }
   state.value = next
   try {
     // Preserve unreadable records before a fresh state can replace them.
@@ -41,7 +55,11 @@ function save(next) {
       localStorage.setItem(RECOVERY_STORAGE, recoverySnapshot.value)
       recoveryPersisted = true
     }
-    localStorage.setItem(STORAGE, JSON.stringify(next)); storageAvailable.value = true
+    let previous=null
+    try{previous=JSON.parse(localStorage.getItem(STORAGE) || 'null')}catch{}
+    const marker=applicationId===undefined ? previous?._cloudAppliedId : applicationId
+    localStorage.setItem(STORAGE, JSON.stringify(marker ? {...next,_cloudAppliedId:marker} : next)); storageAvailable.value = true
+    if (!fromCloud) cloud?.schedule()
     return true
   }
   catch { storageAvailable.value = false; notify('本地保存失败，请导出备份并检查存储权限或空间'); return false }
@@ -71,6 +89,62 @@ const bookCategory = ref('全部')
 const bookSearch = ref('')
 const downloadingBook = ref('')
 const catalogRevision = ref(0)
+try {
+  cloud = connectCloud({
+    getState: () => {
+      // Tabs share durable progress. Read it again while holding the sync lock,
+      // so an older tab cannot submit the same answer as another local delta.
+      const saved=localStorage.getItem(STORAGE)
+      if(saved){
+        const raw=JSON.parse(saved)
+        const {_cloudAppliedId,...plain}=raw
+        if(JSON.stringify({...plain,history:[]})!==JSON.stringify({...state.value,history:[]})){
+          state.value=core.restoreState(raw);lastRating=null
+        }
+      }
+      return state.value
+    },
+    getAppliedId: () => JSON.parse(localStorage.getItem(STORAGE) || 'null')?._cloudAppliedId || null,
+    setState(next,applicationId) {
+      const unchanged=JSON.stringify({...state.value,history:[]})===JSON.stringify({...next,history:[]})
+      if(unchanged) next={...next,history:state.value.history}
+      if (!save(next,true,applicationId)) throw Error('本机保存失败，云端记录仍保留，请释放存储空间后重试')
+      // A merged snapshot has no usable local undo history.
+      if(!unchanged) lastRating = null
+    },
+    onCatalog: () => {catalogRevision.value++},
+    onChange: next => {
+      const changed=(cloudStatus.value.user?.id || null)!==(next.user?.id || null)
+      cloudStatus.value=next
+      if(changed){session.value=[];sessionIndex.value=0;sessionDone.value=false;lastRating=null;navigate('home')}
+    }
+  })
+  cloudStatus.value=cloud.getStatus()
+} catch { /* Guest learning remains available when local storage is blocked. */ }
+function syncWhenVisible() { if (!document.hidden) cloud?.init() }
+function syncOnFocus() { cloud?.sync() }
+function onCloudIdentityChange(event) {
+  if(event.key==='oneword.cloud.identity.v1'){location.reload();return}
+  if(event.key===STORAGE && event.newValue){
+    try{state.value=core.restoreState(event.newValue);lastRating=null}
+    catch{location.reload()}
+  }
+}
+onMounted(() => {
+  cloud?.init()
+  window.addEventListener('online',syncWhenVisible)
+  window.addEventListener('focus',syncOnFocus)
+  document.addEventListener('visibilitychange',syncWhenVisible)
+  window.addEventListener('storage',onCloudIdentityChange)
+})
+const cloudTimer=setInterval(()=>{if(!document.hidden)cloud?.sync()},60000)
+onBeforeUnmount(()=>{
+  clearInterval(cloudTimer);cloud?.destroy()
+  window.removeEventListener('online',syncWhenVisible)
+  window.removeEventListener('focus',syncOnFocus)
+  document.removeEventListener('visibilitychange',syncWhenVisible)
+  window.removeEventListener('storage',onCloudIdentityChange)
+})
 const fullBookOpen = ref(null)
 const bookMetadata = ref({})
 let metadataRequest
@@ -117,7 +191,6 @@ const expanded = ref(false)
 const currentWord = computed(() => session.value[sessionIndex.value])
 const sessionTotal = computed(() => session.value.length)
 const sessionPercent = computed(() => sessionTotal.value ? Math.round(sessionIndex.value/sessionTotal.value*100) : 0)
-let lastRating = null
 function startSession(mode='today') {
   now.value = Date.now()
   const queue = core.makeSession(state.value,{mode,now:now.value,limit:60})
@@ -280,7 +353,7 @@ onBeforeUnmount(() => {document.removeEventListener('keydown',onDialogKey);docum
     </aside>
     <main class="main" :inert="dialogOpen || undefined">
       <template v-if="page!=='study'">
-        <header class="topbar"><a class="mobile-brand" href="#home"><Icon name="leaf" :size="23"/><b>一词</b></a><span class="topbar-date">{{dateLabel}}</span><div class="topbar-right"><span class="streak-pill"><Icon name="sun" :size="16"/>{{stats.streak ? `连续学习 ${stats.streak} 天` : '从今天，开始积累'}}</span><button class="avatar" aria-label="打开学习设置" @click="settingOpen=true">{{stats.streak ? stats.streak : '词'}}</button></div></header>
+        <header class="topbar"><a class="mobile-brand" href="#home"><Icon name="leaf" :size="23"/><b>一词</b></a><span class="topbar-date">{{dateLabel}}</span><div class="topbar-right"><span class="streak-pill"><Icon name="sun" :size="16"/>{{stats.streak ? `连续学习 ${stats.streak} 天` : '从今天，开始积累'}}</span><button class="cloud-entry" aria-label="打开账号与同步" @click="settingOpen=true">{{cloudStatus.user ? cloudStatus.user.username.slice(0,1).toUpperCase() : '登录'}}</button><button class="avatar" aria-label="打开学习设置" @click="settingOpen=true">{{stats.streak ? stats.streak : '词'}}</button></div></header>
         <div v-if="!storageAvailable || recoverySnapshot" class="storage-warning">{{recoverySnapshot ? '旧记录暂时无法读取，原内容已保留，请先导出以便恢复。' : '本地记录暂时无法读取或保存。请先导出备份，并检查浏览器存储设置。'}}<button v-if="recoverySnapshot" @click="exportRecovery">导出原记录</button><button v-else @click="exportData">导出备份</button></div>
       </template>
 
@@ -294,7 +367,7 @@ onBeforeUnmount(() => {document.removeEventListener('keydown',onDialogKey);docum
         <section class="daily-stats" aria-label="今日进度"><div><span class="stat-label"><span class="stat-mark green"></span>今日新学</span><div><b>{{stats.todayNew}}</b><span>/ {{stats.dailyGoal}} 词</span></div><div class="mini-progress"><i :style="{width:Math.min(100,stats.todayNew/stats.dailyGoal*100)+'%'}"></i></div></div><div><span class="stat-label"><span class="stat-mark apricot"></span>到期复习</span><div><b>{{stats.dueCount}}</b><span>词等你再见</span></div><button class="stat-link" @click="startSession('review')">{{stats.dueCount ? '趁还记得，再见一次' : '暂无到期，轻松一点'}}<Icon name="arrow" :size="15"/></button></div><div><span class="stat-label"><span class="stat-mark sage"></span>累计相遇</span><div><b>{{learnedWords}}</b><span>个单词</span></div><span class="stat-caption">每一词，都是你的积累</span></div></section>
         <div class="home-lower"><section class="current-book section-card"><div class="section-top"><h3>正在学习</h3><button class="text-button" @click="navigate('books')">换本词书<Icon name="arrow" :size="16"/></button></div><div class="current-book-content"><div class="book-cover small-cover" :style="{'--cover':activeBook.coverColor || '#d9dfbe'}"><span>ONEWORD<br>SELECTED</span><b>{{activeBook.title}}</b><small>一词 · 精选词库</small><div class="cover-lines"></div></div><div class="book-summary"><span class="tag">{{isFullBook(activeBook)?'完整词库':'精选核心词'}}</span><h4>{{activeBook.title}}</h4><p>{{activeBook.count}} 词 · {{isFullBook(activeBook)?'已离线保存':'离线精选，轻量开始'}}</p><div class="book-progress-label"><span>已相遇 {{stats.learnedCount}} 词</span><b>{{Math.round(stats.progress)}}%</b></div><div class="mini-progress"><i :style="{width:stats.progress+'%'}"></i></div><button v-if="!isFullBook(activeBook)" class="download-inline text-button" @click="fullBookOpen=activeBook"><Icon name="download" :size="13"/>获取完整词库</button></div></div></section>
         <section class="word-of-day section-card"><span class="tiny-label">A WORD TO KEEP</span><span class="word-number">01 / 慢慢记</span><h3>{{seedWord.word}}</h3><p>{{seedWord.pos}} <span>{{seedWord.coreMeaning}}</span></p><div class="word-day-bottom"><span>好的相遇，值得记住。</span><button class="round-button" aria-label="朗读每日单词" @click="pronounce(seedWord)"><Icon name="sound" :size="18"/></button></div></section></div>
-        <div class="gentle-note"><Icon name="shield" :size="16"/><span>无需登录，即刻开始。学习进度保存在当前设备，支持导出备份。</span></div>
+        <div class="gentle-note"><Icon name="shield" :size="16"/><span>{{cloudStatus.user ? cloudStatus.message : '游客可直接学习；登录后可在不同设备继续。'}}</span></div><AccountPanel v-if="cloud" :client="cloud" :status="cloudStatus" />
       </div>
 
       <div v-else-if="page==='books'" class="page books-page"><div class="page-heading"><div><p class="eyebrow">FIND YOUR NEXT CHAPTER</p><h1>选一本，慢慢记。</h1><p class="subtitle">从课堂到更远的世界，总有适合你的起点。</p></div></div><div class="library-toolbar"><div class="filter-tabs"><button v-for="category in categories" :class="{selected:bookCategory===category}" @click="bookCategory=category">{{category}}</button></div><label class="search"><Icon name="search" :size="19"/><input v-model="bookSearch" aria-label="搜索词书" placeholder="搜索词书"/></label></div><p class="library-note">内置离线精选，也可下载完整源标签词库。实际收录数量如实展示，不同词书的学习进度互通。</p><div class="book-grid"><article v-for="book in filteredBooks" :key="book.id" class="book-item" tabindex="0" role="button" @keydown.enter="selectBook(book)" :class="{chosen:state.bookId===book.id,unavailable:!book.available}" @click="selectBook(book)"><div class="book-cover" :style="{'--cover':book.coverColor || '#d8dfc8'}"><span>ONEWORD<br>VOCABULARY</span><b>{{book.title}}</b><span class="cover-subtitle">{{book.subtitle}}</span><div class="cover-lines"></div><small>{{String(books.indexOf(book)+1).padStart(2,'0')}} / 每次记一点</small><span v-if="state.bookId===book.id" class="cover-selected"><Icon name="check" :size="15"/>在学</span></div><div class="book-item-info"><h3>{{book.title}}</h3><span>{{book.available ? `${book.count} 词 · ${isFullBook(book)?'完整已缓存':'离线精选'}` : '整理中'}}</span><span v-if="book.available && !isFullBook(book) && fullCount(book)" class="full-book-count">完整版 {{fullCount(book)}} 词</span><div v-if="progressForBook(book).count" class="mini-progress"><i :style="{width:progressForBook(book).percent+'%'}"></i></div><button v-if="book.available && !isFullBook(book)" class="book-download text-button" @click.stop="fullBookOpen=book"><Icon name="download" :size="13"/>下载完整词库</button></div></article></div><div v-if="!filteredBooks.length" class="empty-state"><Icon name="search" :size="36"/><h3>还没找到这本词书</h3><p>试试“四级”“高中”或其他关键词。</p><button class="text-button" @click="bookSearch='';bookCategory='全部'">查看全部词书</button></div></div>
@@ -311,7 +384,7 @@ onBeforeUnmount(() => {document.removeEventListener('keydown',onDialogKey);docum
     <div v-if="fullBookOpen" class="overlay" @click.self="!downloadingBook && (fullBookOpen=null)"><section class="dialog download-dialog" role="dialog" aria-modal="true" aria-labelledby="download-title"><button class="dialog-close round-button" :disabled="!!downloadingBook" aria-label="关闭词库下载" @click="fullBookOpen=null"><Icon name="close"/></button><p class="eyebrow">A BIGGER WORLD OF WORDS</p><h2 id="download-title">把更多单词，放进口袋。</h2><h3>{{fullBookOpen.title}}</h3><p>内置 {{fullBookOpen.selectedCount || 180}} 词精选<span v-if="fullCount(fullBookOpen)">；完整版实际收录 {{fullCount(fullBookOpen)}} 词</span>。完整词库覆盖 ECDICT 对应标签的全部有效词条，可下载后离线使用。它来自开源词典标签，收录范围与现行考试大纲可能不同。</p><p>下载不影响已有进度。词库保存在当前设备；备份恢复完整词书时需要网络或本机已有缓存。</p><button class="primary-button" :disabled="!!downloadingBook" @click="getFullBook(fullBookOpen)"><Icon name="download" :size="18"/>{{downloadingBook?'正在下载并保存…':'下载完整词库'}}</button><button class="text-button" :disabled="!!downloadingBook" @click="fullBookOpen=null">先用离线精选</button></section></div>
     <Transition name="toast"><div v-if="toast" class="toast-message" role="status"><Icon name="check" :size="18"/>{{toast}}</div></Transition>
     <div v-if="tutorialOpen" class="overlay" @click.self="closeTutorial"><section class="dialog tutorial-dialog" role="dialog" aria-modal="true" aria-labelledby="tutorial-title"><button class="dialog-close round-button" aria-label="跳过教程" @click="closeTutorial"><Icon name="close" :size="20"/></button><div class="tutorial-art"><div class="tutorial-orbit"></div><Icon :name="tutorials[tutorialStep].icon" :size="69"/></div><p class="eyebrow">HELLO, ONEWORD</p><h2 id="tutorial-title">{{tutorials[tutorialStep].title}}</h2><p>{{tutorials[tutorialStep].text}}</p><div class="tutorial-dots"><i v-for="i in 3" :class="{active:tutorialStep===i-1}"></i></div><button class="primary-button" @click="tutorialStep<2?tutorialStep++:closeTutorial()">{{tutorialStep<2?'下一步':'从一个词开始'}}<Icon name="arrow" :size="18"/></button><button class="text-button" @click="closeTutorial">{{tutorialStep<2?'跳过，直接体验':'我知道了'}}</button></section></div>
-    <div v-if="settingOpen" class="overlay" @click.self="settingOpen=false"><section class="dialog settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title"><div class="dialog-title"><div><p class="eyebrow">YOUR OWN PACE</p><h2 id="settings-title">按自己的节奏</h2></div><button class="round-button" aria-label="关闭设置" @click="settingOpen=false"><Icon name="close"/></button></div><fieldset class="learning-order-settings"><legend>学习顺序</legend><div class="learning-order-options"><label v-for="order in learningOrders" :key="order.id" class="learning-order-option" :class="{selected:selectedOrder.id===order.id}"><input type="radio" name="learning-order" :value="order.id" :checked="selectedOrder.id===order.id" @change="changeSetting('learningOrder',order.id)"/><span><b>{{order.label}}<small v-if="order.id==='adaptive'">推荐</small></b><span>{{order.description}}</span></span><Icon v-if="selectedOrder.id===order.id" name="check" :size="17"/></label></div><p class="learning-order-note">到期词始终先于新词；切换后从下一组开始生效。</p><p v-if="page==='study' && !sessionDone" class="learning-order-current">本组使用「{{sessionOrder.label}}」，继续学习时顺序保持不变。</p></fieldset><div class="setting-row"><div><b>每天新学</b><p>先复习，再学一点新的。</p></div><select aria-label="每日新词数量" :value="state.settings.dailyGoal" @change="changeSetting('dailyGoal',Number($event.target.value))"><option v-for="n in [...new Set([state.settings.dailyGoal,5,10,15,20,30,40,50])].sort((a,b)=>a-b)" :value="n">{{n}} 词</option></select></div><div class="setting-row"><div><b>先回忆，再看答案</b><p>开启后先隐藏中文，主动想起更牢固。</p></div><button role="switch" :aria-checked="state.settings.recallFirst" aria-label="先回忆再看答案" class="toggle" :class="{on:state.settings.recallFirst}" @click="changeSetting('recallFirst',!state.settings.recallFirst)"><i></i></button></div><div class="setting-row"><div><b>朗读口音</b><p>声音由当前设备的语音服务提供。</p></div><select aria-label="朗读口音" :value="state.settings.accent || 'us'" @change="changeSetting('accent',$event.target.value)"><option value="us">美音</option><option value="uk">英音</option></select></div><div class="settings-data"><h3>你的积累，自己保管</h3><p>进度仅保存在当前浏览器，清理数据或更换设备后不会自动同步。请定期备份；恢复会覆盖本机记录。</p><div class="data-actions"><button class="secondary-button" @click="exportData"><Icon name="download" :size="18"/>导出备份</button><label class="secondary-button import-button" :aria-busy="importingBackup"><Icon name="upload" :size="18"/>{{importingBackup?'正在恢复…':'恢复备份'}}<input type="file" :disabled="importingBackup" accept="application/json,.json" @change="importData"/></label></div></div><button class="settings-help text-button" @click="settingOpen=false;tutorialOpen=true;tutorialStep=0"><Icon name="help" :size="18"/>再看一次使用指南</button><div class="settings-about"><Icon name="leaf" :size="20"/><span>一词 OneWord · 1.0<br><small>离线学习 · 无广告 · 无需登录</small></span></div></section></div>
+    <div v-if="settingOpen" class="overlay" @click.self="settingOpen=false"><section class="dialog settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-title"><div class="dialog-title"><div><p class="eyebrow">YOUR OWN PACE</p><h2 id="settings-title">按自己的节奏</h2></div><button class="round-button" aria-label="关闭设置" @click="settingOpen=false"><Icon name="close"/></button></div><AccountPanel v-if="cloud" :client="cloud" :status="cloudStatus" /><fieldset class="learning-order-settings"><legend>学习顺序</legend><div class="learning-order-options"><label v-for="order in learningOrders" :key="order.id" class="learning-order-option" :class="{selected:selectedOrder.id===order.id}"><input type="radio" name="learning-order" :value="order.id" :checked="selectedOrder.id===order.id" @change="changeSetting('learningOrder',order.id)"/><span><b>{{order.label}}<small v-if="order.id==='adaptive'">推荐</small></b><span>{{order.description}}</span></span><Icon v-if="selectedOrder.id===order.id" name="check" :size="17"/></label></div><p class="learning-order-note">到期词始终先于新词；切换后从下一组开始生效。</p><p v-if="page==='study' && !sessionDone" class="learning-order-current">本组使用「{{sessionOrder.label}}」，继续学习时顺序保持不变。</p></fieldset><div class="setting-row"><div><b>每天新学</b><p>先复习，再学一点新的。</p></div><select aria-label="每日新词数量" :value="state.settings.dailyGoal" @change="changeSetting('dailyGoal',Number($event.target.value))"><option v-for="n in [...new Set([state.settings.dailyGoal,5,10,15,20,30,40,50])].sort((a,b)=>a-b)" :value="n">{{n}} 词</option></select></div><div class="setting-row"><div><b>先回忆，再看答案</b><p>开启后先隐藏中文，主动想起更牢固。</p></div><button role="switch" :aria-checked="state.settings.recallFirst" aria-label="先回忆再看答案" class="toggle" :class="{on:state.settings.recallFirst}" @click="changeSetting('recallFirst',!state.settings.recallFirst)"><i></i></button></div><div class="setting-row"><div><b>朗读口音</b><p>声音由当前设备的语音服务提供。</p></div><select aria-label="朗读口音" :value="state.settings.accent || 'us'" @change="changeSetting('accent',$event.target.value)"><option value="us">美音</option><option value="uk">英音</option></select></div><div class="settings-data"><h3>你的积累，自己保管</h3><p>游客进度保存在本机；登录后自动同步词集、复习计划、设置和每日记录。断网仍可学习，联网后合并。备份是额外保障，恢复会替换本机进度；登录时也会同步到当前账号。</p><div class="data-actions"><button class="secondary-button" @click="exportData"><Icon name="download" :size="18"/>导出备份</button><label class="secondary-button import-button" :aria-busy="importingBackup"><Icon name="upload" :size="18"/>{{importingBackup?'正在恢复…':'恢复备份'}}<input type="file" :disabled="importingBackup" accept="application/json,.json" @change="importData"/></label></div></div><button class="settings-help text-button" @click="settingOpen=false;tutorialOpen=true;tutorialStep=0"><Icon name="help" :size="18"/>再看一次使用指南</button><div class="settings-about"><Icon name="leaf" :size="20"/><span>一词 OneWord · 1.0<br><small>离线学习 · 账号同步 · 无广告</small></span></div></section></div>
     <div v-if="detail" class="overlay" @click.self="detail=null"><section class="dialog detail-dialog" role="dialog" aria-modal="true" aria-labelledby="detail-title"><button class="dialog-close round-button" aria-label="关闭单词详情" @click="detail=null"><Icon name="close"/></button><span class="tiny-label">A WORD YOU MET</span><h2 id="detail-title">{{detail.word}}</h2><p class="phonetic">{{detail.phonetic}}<button class="round-button" aria-label="朗读单词" @click="pronounce(detail)"><Icon name="sound" :size="18"/></button></p><div class="detail-core"><small>核心义 · {{detail.pos}}</small><h3>{{detail.coreMeaning}}</h3></div><div class="expanded-meaning"><div v-for="(meaning,index) in detail.meanings" :key="index"><small>{{meaning.pos}}</small><span>{{meaning.meaning}}</span></div><blockquote v-if="detail.example"><p>{{detail.example.en}}</p><span>{{detail.example.zh}}</span></blockquote></div><p class="detail-schedule">当前状态：{{collectionLabels[state.words[detail.id]?.status] || '尚未学习'}}<br>下次复习：{{state.words[detail.id]?.dueAt ? new Date(state.words[detail.id].dueAt).toLocaleString('zh-CN'):'学习后安排'}}</p><button class="secondary-button" @click="moveToLearning(detail)">移回不认识，重新学习<Icon name="arrow" :size="17"/></button></section></div>
   </div>
 </template>

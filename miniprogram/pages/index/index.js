@@ -1,7 +1,10 @@
 const store = require('../../utils/store')
+const cloud = require('../../utils/cloud')
 Page({
   data: { stats: {}, book: {}, tutorial: false, today: '', progressStyle: '', pending: {}, recovery: {}, orderOptions: store.core.LEARNING_ORDERS, orderIndex: 0, orderLabel: '记忆优先' },
   onShow() {
+    if (this.unsubscribeCloud) this.unsubscribeCloud()
+    this.unsubscribeCloud = cloud.subscribe(() => this.refresh())
     this.refresh()
     this.setData({ tutorial: !store.tutorialSeen() })
     if (this.refreshTimer) clearInterval(this.refreshTimer)
@@ -30,7 +33,7 @@ Page({
   collections() { wx.switchTab({ url: '/pages/collections/collections' }) },
   dismissTutorial() { store.finishTutorial(); this.setData({ tutorial: false }) },
   beginTutorial() { this.dismissTutorial(); this.start() },
-  onHide() { if (this.refreshTimer) clearInterval(this.refreshTimer); this.refreshTimer = null },
+  onHide() { if (this.refreshTimer) clearInterval(this.refreshTimer); this.refreshTimer = null; if (this.unsubscribeCloud) this.unsubscribeCloud(); this.unsubscribeCloud = null },
   onUnload() { this.onHide() },
   noop() {}
 })

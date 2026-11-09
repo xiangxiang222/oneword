@@ -1,5 +1,5 @@
 module.exports = {
-  // Only used when the user explicitly requests a full dictionary download.
+  // Login, cloud sync and optional complete dictionaries use this HTTPS API.
   // Add togetherbetter.cn to the WeChat request domain allowlist before release.
   apiBase: 'https://togetherbetter.cn/oneword/api'
 }

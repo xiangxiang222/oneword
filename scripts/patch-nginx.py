@@ -2,10 +2,12 @@
 """Add the isolated location to both HTTP and HTTPS proxy server blocks."""
 from pathlib import Path
 import subprocess
+import re
 
 BLOCK = '''    # OneWord: isolated service, port 3795
     location = /oneword { return 308 /oneword/; }
     location /oneword/ {
+        client_max_body_size 6m;
         proxy_pass http://127.0.0.1:3795;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -26,7 +28,22 @@ def patch_config(original):
     if existing:
         if existing != original.count(anchor):
             raise ValueError('Partial OneWord nginx configuration found; no changes made.')
-        return original
+        # Earlier read-only releases used nginx's inherited upload limit. Only
+        # update our own proxy location so full progress snapshots can sync.
+        def upgrade(match):
+            body = match.group(2)
+            if 'proxy_pass http://127.0.0.1:3795;' not in body:
+                raise ValueError('Unknown OneWord upstream; no changes made.')
+            directive = '        client_max_body_size 6m;\n'
+            if re.search(r'^\s*client_max_body_size\s+', body, re.M):
+                body = re.sub(r'^\s*client_max_body_size\s+[^;]+;\s*\n', directive, body, flags=re.M)
+            else:
+                body = directive + body
+            return match.group(1) + body + match.group(3)
+        updated, count = re.subn(r'(    location /oneword/ \{\n)(.*?)(    \}\n)', upgrade, original, flags=re.S)
+        if count != existing:
+            raise ValueError('Unknown OneWord location layout; no changes made.')
+        return updated
     # The reference host has separate HTTP and HTTPS server blocks. Each needs
     # the location; inserting only once leaves the public HTTPS URL unreachable.
     return original.replace(anchor, BLOCK + anchor)

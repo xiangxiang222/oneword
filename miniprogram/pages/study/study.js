@@ -1,4 +1,5 @@
 const store = require('../../utils/store')
+const cloud = require('../../utils/cloud')
 const MODE_LABELS = { today: '今日学习', review: '到期复习', unknown: '不认识词集', unsure: '不确定词集', known: '认识词集' }
 Page({
   data: { word: null, mode: 'today', modeLabel: '', orderId: 'adaptive', orderLabel: '记忆优先', bookTitle: '', index: 0, total: 0, done: false, revealed: true, expanded: false, canUndo: false, dragStyle: '', swipeLabel: '', stats: {}, sessionCounts: { known: 0, unsure: 0, unknown: 0 }, nextDueLabel: '', progressStyle: 'width:0%', busy: false, pending: {} },
@@ -15,6 +16,8 @@ Page({
   },
   onShow() {
     if (!this.queue) return
+    if (this.unsubscribeCloud) this.unsubscribeCloud()
+    this.unsubscribeCloud = cloud.subscribe(() => this.refreshStats())
     this.refreshStats()
     if (this.refreshTimer) clearInterval(this.refreshTimer)
     this.refreshTimer = setInterval(() => this.refreshStats(), 15000)
@@ -89,6 +92,6 @@ Page({
     this.setData({ total: this.queue.length, orderId: order.id, orderLabel: order.label })
     this.present()
   },
-  onHide() { if (this.refreshTimer) clearInterval(this.refreshTimer); this.refreshTimer = null },
+  onHide() { if (this.refreshTimer) clearInterval(this.refreshTimer); this.refreshTimer = null; if (this.unsubscribeCloud) this.unsubscribeCloud(); this.unsubscribeCloud = null },
   onUnload() { this.onHide(); if (this.unlockTimer) clearTimeout(this.unlockTimer) }
 })

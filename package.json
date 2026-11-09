@@ -11,6 +11,7 @@
     "start": "node server/index.js",
     "test": "node --test test/*.test.cjs",
     "test:browser": "node test/browser.cjs",
+    "test:cloud": "node test/cloud-browser.cjs",
     "test:native": "node --test test/native.test.cjs",
     "deploy": "bash scripts/deploy.sh",
     "pr": "bash scripts/create-pr.sh"

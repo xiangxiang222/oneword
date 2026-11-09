@@ -28,6 +28,7 @@ jobs:
       - run: npm audit --audit-level=high && npm audit --prefix web --audit-level=high && npm audit --prefix server --omit=dev --audit-level=high
       - run: npx playwright-core install --with-deps chromium
       - run: npm run test:browser
+      - run: npm run test:cloud
       - uses: actions/upload-artifact@v4
         if: always()
         with:

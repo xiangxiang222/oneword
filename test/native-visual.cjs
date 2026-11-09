@@ -15,7 +15,7 @@ global.wx = { getStorageSync: key => data.get(key), setStorageSync: (key, value)
 const store = require('../miniprogram/utils/store')
 function fixture(name) {
   store.write(store.core.createState())
-  const route = name === 'onboarding' ? 'index' : name === 'expanded' ? 'study' : name === 'populated' ? 'collections' : name
+  const route = name === 'onboarding' ? 'index' : name === 'expanded' ? 'study' : name === 'populated' ? 'collections' : ['login', 'account', 'account-delete'].includes(name) ? 'profile' : name
   if (['populated', 'profile'].includes(name)) {
     store.core.makeSession(store.read(), { mode: 'today' }).slice(0, 6).forEach((word, index) => store.write(store.core.rateWord(store.read(), word.id, ['unknown', 'known', 'unsure'][index % 3], Date.now() - 30000 + index * 1000)))
   }
@@ -28,6 +28,8 @@ function fixture(name) {
   if (definition.onShow) definition.onShow()
   if (name === 'index') definition.data.tutorial = false
   if (name === 'expanded') definition.expand()
+  if (name === 'login') definition.openAccount()
+  if (name === 'account' || name === 'account-delete') Object.assign(definition.data, { panel: 'account', account: { user: { id: 'visual-only', username: 'learner_2026' }, phase: 'offline', message: '待联网同步，学习记录已保留' }, accountInitial: 'L', syncLabel: '待联网同步，本机记录已保留', syncTime: '2026/11/9 16:30:00', authMode: name === 'account-delete' ? 'delete' : 'login' })
   return { route, data: definition.data }
 }
 function css(route, width) {
@@ -42,7 +44,7 @@ function css(route, width) {
   try {
     for (const width of [320, 390]) {
       const page = await browser.newPage({ viewport: { width, height: 844 }, deviceScaleFactor: 1 })
-      for (const name of ['index', 'study', 'expanded', 'books', 'collections', 'populated', 'profile', 'onboarding']) {
+      for (const name of ['index', 'study', 'expanded', 'books', 'collections', 'populated', 'profile', 'onboarding', 'login', 'account', 'account-delete']) {
         const { route, data } = fixture(name)
         const source = fs.readFileSync(path.join(mini, 'pages', route, route + '.wxml'), 'utf8')
         await page.setContent('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><style>html,body{margin:0;padding:0}body{padding-bottom:62px}button{display:block;font-family:inherit;cursor:pointer}input,textarea{font-family:inherit;outline:0;border:0}.preview-label{font:9px system-ui;text-align:center;color:#9aa58f;padding:4px}.preview-nav{padding:11px 18px;text-align:center;font:14px system-ui;color:#244d3d}.preview-tabs{position:fixed;bottom:0;left:0;right:0;background:#f6f5ef;display:flex;justify-content:space-around;padding:10px 0;border-top:1px solid #e3e7db;font:10px system-ui;z-index:9}.preview-tabs>div{text-align:center}.preview-tabs img{width:22px;height:22px;display:block;margin:0 auto 3px}</style><style>' + css(route, width) + '</style><body><div class="preview-label">WXML / WXSS 源码镜像 · 非微信真机</div><div class="preview-nav">' + ({ index: '一词 OneWord', study: '今日学习', books: '词书', collections: '词集', profile: '我的' }[route] || '') + '</div></body></html>')

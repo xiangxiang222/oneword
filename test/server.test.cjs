@@ -46,10 +46,10 @@ test('base path validation rejects ambiguous and external paths', () => {
   assert.equal(normalizeBasePath('/'), '');
   for (const value of ['https://host', '/foo//bar', '/foo/../bar', '/foo?x=1']) assert.throws(() => normalizeBasePath(value));
 });
-test('health reports local storage and security headers without Express fingerprint', async () => {
+test('health reports cloud and local storage with security headers without Express fingerprint', async () => {
   const response = await fetch(`${origin}/oneword/api/health`);
   assert.equal(response.status, 200);
-  assert.equal((await response.json()).storage, 'local');
+  assert.equal((await response.json()).storage, 'cloud+local');
   assert.equal(response.headers.get('x-powered-by'), null);
   assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
   assert.match(response.headers.get('content-security-policy'), /frame-ancestors 'none'/);

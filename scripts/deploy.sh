@@ -13,7 +13,7 @@ SSH=(ssh -i "$KEY" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 "
 "${SSH[@]}" "sudo mkdir -p '$DIR/releases/$RELEASE' && sudo chown -R '$DEPLOY_USER:$DEPLOY_USER' '$DIR'"
 rsync -az --delete --timeout=120 -e "ssh -i $KEY -o IdentitiesOnly=yes -o BatchMode=yes" \
   --exclude '.git/' --exclude 'node_modules/' --exclude '.env*' --exclude 'test-results/' \
-  --exclude 'web/src/generated/' --exclude '.DS_Store' \
+  --exclude 'web/src/generated/' --exclude 'server/data/' --exclude '.DS_Store' \
   "$ROOT/" "$DEPLOY_USER@$HOST:$DIR/releases/$RELEASE/"
 "${SSH[@]}" bash -s -- "$DIR" "$RELEASE" <<'REMOTE'
 set -Eeuo pipefail
@@ -22,6 +22,19 @@ RELEASE="$2"
 TARGET="$DIR/releases/$RELEASE"
 cd "$TARGET"
 npm ci --prefix server --omit=dev --no-fund
+mkdir -p "$DIR/data" "$DIR/backups"
+chmod 700 "$DIR/data" "$DIR/backups"
+# SQLite's online backup includes committed WAL records. Releases and rollback
+# never replace the shared database, and every update keeps a consistent copy.
+if [ -f "$DIR/data/oneword.sqlite" ]; then
+  node - "$TARGET" "$DIR/data/oneword.sqlite" "$DIR/backups/$RELEASE.sqlite" <<'DATABASE'
+const path = require('node:path');
+const Database = require(path.join(process.argv[2], 'server/node_modules/better-sqlite3'));
+const database = new Database(process.argv[3], { readonly: true });
+database.backup(process.argv[4]).then(() => database.close()).catch(error => { console.error('Database backup failed:', error.message); process.exitCode = 1; database.close(); });
+DATABASE
+  chmod 600 "$DIR/backups/$RELEASE.sqlite"
+fi
 printf '%s\n' "$RELEASE" > "$TARGET/.release-id"
 OLD="$(readlink "$DIR/current" || true)"
 NGINX_PATH=/etc/nginx/sites-available/beiyexing
