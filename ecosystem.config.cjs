@@ -8,8 +8,8 @@ module.exports = { apps: [{
   cwd: '/var/www/oneword/current',
   instances: 1,
   exec_mode: 'fork',
-  max_memory_restart: '180M',
-  env: { NODE_ENV:'production', PORT:'3795', BIND_HOST:'127.0.0.1', BASE_PATH:'/oneword', ONEWORD_RELEASE_ID:releaseId },
+  max_memory_restart: '300M',
+  env: { NODE_ENV:'production', PORT:'3795', BIND_HOST:'127.0.0.1', BASE_PATH:'/oneword', ONEWORD_RELEASE_ID:releaseId, ONEWORD_DB_PATH:'/var/www/oneword/data/oneword.sqlite' },
   time: true,
   kill_timeout: 11000
 }] };

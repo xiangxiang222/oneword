@@ -11,6 +11,11 @@ let installedBookIds = []
 let cached = null
 let recoveryBlocked = false
 let loadWarning = ''
+let appliedId = null
+let changeListener = null
+let clearGuard = null
+function setChangeListener(listener) { changeListener = typeof listener === 'function' ? listener : null }
+function setClearGuard(guard) { clearGuard = typeof guard === 'function' ? guard : null }
 function read() {
   if (cached) return cached
   ensureLibraries()
@@ -18,6 +23,9 @@ function read() {
   try {
     saved = storage.get(KEY)
     cached = saved ? core.restoreState(saved) : core.createState()
+    let raw = saved
+    if (typeof raw === 'string') raw = JSON.parse(raw)
+    appliedId = raw && typeof raw._cloudAppliedId === 'string' ? raw._cloudAppliedId : null
   }
   catch (error) {
     // Preserve the exact unreadable value before allowing a fresh record to be
@@ -36,10 +44,17 @@ function read() {
   }
   return cached
 }
-function write(state) {
+function getAppliedId() { read(); return appliedId }
+function write(state, applicationId) {
+  if (!cached) read()
   if (recoveryBlocked) throw new Error('为保留原始记录，当前已暂停写入。请释放存储空间后重启微信。')
-  storage.put(KEY, state)
+  // Keep the cloud-application marker in the same atomic storage value as its
+  // state. New local answers retain it so an interrupted merge can be retried.
+  const nextAppliedId = applicationId === undefined ? appliedId : applicationId
+  storage.put(KEY, nextAppliedId ? Object.assign({}, state, { _cloudAppliedId: nextAppliedId }) : state)
+  appliedId = nextAppliedId || null
   cached = state
+  if (changeListener) changeListener(state)
   return state
 }
 function recoveryInfo() {
@@ -55,9 +70,11 @@ function recoveryJSON() {
   return JSON.stringify(backup, null, 2)
 }
 function clearAll() {
+  if (clearGuard) clearGuard()
   const fresh = core.createState()
   storage.put(KEY, fresh)
   cached = fresh
+  appliedId = null
   storage.remove(RECOVERY_KEY)
   recoveryBlocked = false
   loadWarning = ''
@@ -187,4 +204,4 @@ function speak(word) {
   audio.onError(() => { audio.destroy(); wx.showToast({ title: '音频暂不可用', icon: 'none' }) })
   audio.play()
 }
-module.exports = { core, vocabulary, read, write, apply, tutorialSeen, finishTutorial, resetTutorial, getWord, currentBook, formatDue, progressFor, speak, KEY, RECOVERY_KEY, recoveryInfo, recoveryJSON, clearAll, pendingInfo, getInstalledBookIds, storageUsage, downloadBook, exportBackup, inspectBackup, restoreBackup }
+module.exports = { core, vocabulary, read, write, apply, tutorialSeen, finishTutorial, resetTutorial, getWord, currentBook, formatDue, progressFor, speak, KEY, RECOVERY_KEY, recoveryInfo, recoveryJSON, clearAll, pendingInfo, getInstalledBookIds, storageUsage, downloadBook, exportBackup, inspectBackup, restoreBackup, setChangeListener, setClearGuard, getAppliedId }

@@ -24,9 +24,11 @@ pm2 logs oneword --lines 60
 curl -fsS http://127.0.0.1:3795/oneword/api/health
 ```
 
-回滚：把 `/var/www/oneword/current` 原子指向需要的 `releases/<id>`，再执行 `pm2 startOrReload /var/www/oneword/current/ecosystem.config.cjs --update-env`，检查健康。学习记录只在客户端，因此服务发布不会迁移或清除用户学习记录。
+回滚：把 `/var/www/oneword/current` 原子指向需要的 `releases/<id>`，再执行 `pm2 startOrReload /var/www/oneword/current/ecosystem.config.cjs --update-env`，检查健康。账号和云端进度存放于独立的 `/var/www/oneword/data/oneword.sqlite`（SQLite WAL），由 `ONEWORD_DB_PATH` 指定。该目录不参与 rsync、发布目录切换或代码回滚，每次部署通过 SQLite 在线备份到 `/var/www/oneword/backups/<release>.sqlite`。数据目录权限 700、数据库与备份 600。代码回滚不会回滚学习数据。
 
-完整词书不含个人数据，由只读 API 按需发送。服务器只托管 `web/dist`，源码、环境文件和其他文件不能通过任意路径访问。没有开放上传或用户管理接口。
+数据库需要独立的异机备份和保留策略；当前部署前备份仍在同一台服务器，不能抵御整台机器或磁盘丢失。人工恢复前先停止 `pm2 stop oneword`，保留当前数据库与 WAL，使用一致的 `.sqlite` 备份替换数据库并移走旧 `-wal`/`-shm` 文件，再启动和检查。不要复制运行中主数据库单文件作为备份。
+
+完整词书不含个人数据，由只读 API 按需发送。服务器只托管 `web/dist`，源码、环境文件和其他文件不能通过任意路径访问。账号接口使用带有效期的 HttpOnly 会话 Cookie（微信原生使用 Bearer 会话），提供注册、登录、退出、改密和删除；云端同步使用版本比较和请求去重。跨站写入会拒绝，API 不允许跨域读取。账号和同步 API 始终 no-store，Service Worker 不缓存它们。
 
 ## 微信发布边界
 

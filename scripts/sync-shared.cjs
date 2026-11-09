@@ -6,7 +6,7 @@ async function main() {
   const out = path.join(root, 'web/src/generated');
   fs.mkdirSync(out, {recursive:true});
   fs.rmSync(out, {recursive:true,force:true});
-  await esbuild.build({ entryPoints:{core:path.join(root,'shared/core.js'),vocabulary:path.join(root,'data/vocabulary.js')}, bundle:true, splitting:true, format:'esm', platform:'browser', target:'es2020', outdir:out });
+  await esbuild.build({ entryPoints:{core:path.join(root,'shared/core.js'),vocabulary:path.join(root,'data/vocabulary.js'),cloud:path.join(root,'shared/cloud-client.js')}, bundle:true, splitting:true, format:'esm', platform:'browser', target:'es2020', outdir:out });
   for (const dir of ['shared','data']) {
     fs.cpSync(path.join(root,dir),path.join(root,'miniprogram',dir), {recursive:true,filter:(src)=>fs.statSync(src).isDirectory() || /\.js$/.test(src)});
   }

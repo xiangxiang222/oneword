@@ -1,7 +1,13 @@
 const store = require('../../utils/store')
+const cloud = require('../../utils/cloud')
 Page({
   data: { books: [], filtered: [], categories: ['全部', '基础', '大学', '留学'], category: '全部', query: '', currentId: '', total: 0, downloadingId: '', storageUsage: null },
   onShow() {
+    if (this.unsubscribeCloud) this.unsubscribeCloud()
+    this.unsubscribeCloud = cloud.subscribe(() => this.refresh())
+    this.refresh()
+  },
+  refresh() {
     const books = store.vocabulary.books
     this.setData({ books, currentId: store.read().bookId, storageUsage: store.storageUsage(), total: books.filter(book => book.available).length })
     this.filter()
@@ -46,5 +52,7 @@ Page({
       wx.showModal({ title: '完整词库未保存', content: error.message || '下载失败，离线精选仍可使用。', showCancel: false, confirmColor: '#244d3d' })
     } finally { this.setData({ downloadingId: '' }); this.filter() }
   },
-  learn() { wx.switchTab({ url: '/pages/index/index' }) }
+  learn() { wx.switchTab({ url: '/pages/index/index' }) },
+  onHide() { if (this.unsubscribeCloud) this.unsubscribeCloud(); this.unsubscribeCloud = null },
+  onUnload() { this.onHide() }
 })

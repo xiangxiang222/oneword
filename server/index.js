@@ -3,9 +3,11 @@
 const express = require('express');
 const fs = require('node:fs');
 const path = require('node:path');
+const { createAccountApi } = require('./auth.js');
 
 const ROOT = path.resolve(__dirname, '..');
 const VERSION = require('./package.json').version;
+const DEFAULT_CATALOG = JSON.parse(JSON.stringify(require('../data/vocabulary.js')));
 const SPA_ROUTES = new Set(['/', '/today', '/study', '/review', '/library', '/books', '/words', '/bag', '/profile', '/settings', '/progress']);
 
 function normalizeBasePath(value) {
@@ -25,7 +27,9 @@ function createApp(options = {}) {
   const basePath = normalizeBasePath(options.basePath ?? process.env.BASE_PATH ?? '/oneword');
   const distDir = path.resolve(options.distDir || path.join(ROOT, 'web/dist'));
   const fullBooksDir = path.resolve(options.fullBooksDir || path.join(ROOT, 'data/full-books'));
-  const catalog = options.catalog || require(path.join(ROOT, 'data/vocabulary.js'));
+  // Account validation installs complete books into the shared learning core.
+  // Keep the public selected catalog independent of that validation cache.
+  const catalog = options.catalog || JSON.parse(JSON.stringify(DEFAULT_CATALOG));
   const books = catalog.books || [];
   const wordMap = catalog.wordMap || Object.fromEntries((catalog.words || []).map(word => [word.id, word]));
   const fullCache = new Map();
@@ -108,15 +112,49 @@ function createApp(options = {}) {
   });
 
   const router = express.Router();
+  const installedForValidation = new Set();
+  const accountApi = createAccountApi({
+    basePath, dbPath: options.dbPath || ':memory:',
+    authIpLimit: options.authIpLimit, authUserLimit: options.authUserLimit,
+    validateState(raw, requestedIds) {
+      if (!raw || !Number.isFinite(raw.createdAt) || raw.createdAt < 0 || raw.createdAt > 8640000000000000) {
+        throw new Error('学习记录创建时间无效');
+      }
+      if (!Array.isArray(requestedIds) || requestedIds.length > 20
+        || requestedIds.some(id => typeof id !== 'string' || !books.some(book => book.id === id && book.available !== false))) {
+        throw new Error('同步词书清单无效');
+      }
+      const bookIds = [...new Set(requestedIds)].sort();
+      const core = require('../shared/core.js');
+      for (const id of bookIds) {
+        if (installedForValidation.has(id)) continue;
+        const payload = fullBook(books.find(book => book.id === id));
+        if (!payload) throw new Error('完整词书暂不可用：' + id);
+        core.installBook(payload);
+        installedForValidation.add(id);
+      }
+      const state = core.restoreState(raw);
+      // A manifest must travel with every word absent from the selected set,
+      // otherwise a new device would be unable to validate its cloud record.
+      const permitted = new Set(Object.keys(wordMap));
+      bookIds.forEach(id => fullBook(books.find(book => book.id === id)).words.forEach(word => permitted.add(word.id)));
+      if (Object.keys(state.words).some(id => !permitted.has(id))
+        || Object.values(state.daily).some(day => day.newWordIds.concat(day.reviewedWordIds).some(id => !permitted.has(id)))) {
+        throw new Error('学习记录缺少对应的完整词书清单');
+      }
+      return { state, bookIds };
+    }
+  });
+  app.locals.closeStore = accountApi.close;
   router.get('/api/health', (req, res) => {
-    res.set('Cache-Control', 'no-store').json({ ok: true, service: 'oneword', version: VERSION, releaseId: process.env.ONEWORD_RELEASE_ID || 'development', storage: 'local', basePath });
+    res.set('Cache-Control', 'no-store').json({ ok: true, service: 'oneword', version: VERSION, releaseId: process.env.ONEWORD_RELEASE_ID || 'development', storage: 'cloud+local', basePath });
   });
   router.get('/api/meta', (req, res) => {
     res.set('Cache-Control', 'public, max-age=300').json({
-      name: '一词', version: VERSION, storage: 'local', cloudSync: false,
+      name: '一词', version: VERSION, storage: 'cloud+local', cloudSync: true,
       bookCount: books.filter(book => book.available !== false).length,
       wordCount: Object.keys(wordMap).length,
-      note: '学习记录仅保存在当前设备；精选词书可离线使用，完整标签词表可按需下载，均不冒充官方考试大纲。'
+      note: '可离线学习，登录后同步学习进度和记录；完整标签词表可按需下载，均不冒充官方考试大纲。'
     });
   });
   router.get('/api/books', (req, res) => {
@@ -133,6 +171,7 @@ function createApp(options = {}) {
     res.set('Cache-Control', 'public, max-age=300').json({ book: { ...bookMetadata(book), edition: 'selected' }, words });
   });
   router.get('/api/books/:id/full', sendFullBook);
+  router.use('/api', accountApi.router);
   router.use('/api', (req, res) => {
     res.status(404).json({ error: 'api_not_found', message: '接口不存在' });
   });
@@ -173,13 +212,13 @@ if (require.main === module) {
   const port = Number(process.env.PORT || 3795);
   const host = process.env.BIND_HOST || '127.0.0.1';
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new TypeError('PORT must be between 1 and 65535');
-  const app = createApp();
+  const app = createApp({ dbPath: process.env.ONEWORD_DB_PATH || path.join(__dirname, 'data/oneword.sqlite') });
   const server = app.listen(port, host, () => console.log(`oneword listening on http://${host}:${port}${normalizeBasePath(process.env.BASE_PATH ?? '/oneword')}/`));
   let stopping = false;
   function shutdown() {
     if (stopping) return;
     stopping = true;
-    server.close(() => process.exit(0));
+    server.close(() => { app.locals.closeStore(); process.exit(0); });
     setTimeout(() => process.exit(1), 10000).unref();
   }
   process.on('SIGTERM', shutdown);
