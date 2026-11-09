@@ -1,0 +1,13 @@
+node_modules/
+web/dist/
+web/src/generated/
+miniprogram/shared/
+miniprogram/data/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+project.private.config.json
+test-results/
+server/data/

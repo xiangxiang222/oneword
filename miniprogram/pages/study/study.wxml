@@ -1,0 +1,26 @@
+<view class="study-page">
+  <view class="between study-meta"><text class="eyebrow">{{bookTitle}}</text><text class="study-counter serif">{{done ? total : index + 1}} <text>/ {{total}}</text></text></view>
+  <view class="study-progress"><view class="study-progress-fill" style="{{progressStyle}}"></view></view>
+  <block wx:if="{{!done}}">
+    <view class="between study-subheading"><text class="pill">{{word.progress ? '温故' : '知新'}}</text><button class="undo-button {{!canUndo ? 'undo-disabled' : ''}}" disabled="{{!canUndo || busy}}" bindtap="undo">↶ 撤销上一词</button></view>
+    <view class="card-stack"><view class="card-under"></view><view class="word-card" style="{{dragStyle}}" bindtouchstart="touchStart" bindtouchmove="touchMove" bindtouchend="touchEnd" bindtouchcancel="touchCancel">
+      <view class="card-kicker">{{modeLabel}}<text wx:if="{{swipeLabel}}" class="swipe-label">{{swipeLabel}}</text></view>
+      <view class="main-word serif {{word.word.length > 13 ? 'long-word' : ''}}">{{word.word}}</view><view class="phonetic">{{word.phonetic ? '/' + word.phonetic + '/' : ' '}}</view>
+      <view class="meaning-divider"></view>
+      <block wx:if="{{revealed}}"><view class="core-label">只记这一个核心意</view><view class="core-meaning"><text class="word-pos">{{word.pos}}</text>{{word.coreMeaning}}</view><button wx:if="{{word.meanings.length > 1 || word.example}}" class="expand-button" bindtap="expand">{{expanded ? '收起词义 −' : '更多词义与用法 ＋'}}</button></block>
+      <block wx:else><view class="recall-prompt">这个词，你能想起它的意思吗？</view><button class="reveal-button" bindtap="reveal">想好了，揭晓核心意</button><view class="recall-hint">想不起来也没关系，诚实判断就好。</view></block>
+      <view wx:if="{{expanded}}" class="expanded-area"><view wx:for="{{word.meanings}}" wx:key="index" class="additional-meaning"><text>{{item.pos}}</text>{{item.meaning}}</view><view wx:if="{{word.example}}" class="example"><view class="example-en serif">{{word.example.en}}</view><view class="example-zh">{{word.example.zh}}</view></view><view class="expanded-note">先收起补充内容，再凭记忆做判断。</view></view>
+      <view wx:if="{{!expanded}}" class="card-footer">a little less. a little longer.</view>
+    </view></view>
+    <view class="gesture-hint">← 左滑不认识<view class="hint-dot"></view>右滑认识 →</view>
+    <view wx:if="{{expanded}}" class="expanded-actions"><button class="primary" bindtap="expand">收起词义，继续判断</button></view>
+    <view wx:else class="answer-actions"><button class="answer-button answer-unknown" data-rating="unknown" bindtap="score" disabled="{{!revealed || busy}}"><text class="answer-symbol">×</text><text>不认识</text></button><button class="answer-button answer-unsure" data-rating="unsure" bindtap="score" disabled="{{!revealed || busy}}"><text class="answer-symbol">≈</text><text>不确定</text></button><button class="answer-button answer-known" data-rating="known" bindtap="score" disabled="{{!revealed || busy}}"><text class="answer-symbol">✓</text><text>认识</text></button></view>
+    <view class="answer-note">{{revealed ? '一次真实的判断，胜过十次匆匆看过。' : '先回忆，再揭晓；看到答案后即可判断。'}}</view>
+  </block>
+  <view wx:else class="complete"><view class="complete-mark"><text class="serif">a.</text><view class="complete-leaf"></view></view><view class="eyebrow">A LITTLE, EVERY DAY</view><view class="complete-title">{{total ? '这一组，完成了。' : '此刻，先歇一歇。'}}</view><view class="complete-copy">{{total ? '你又为记忆，留了一点空间。' : mode === 'review' ? '当前词书暂无到期复习。' : '当前没有需要学习的词。'}}<view>下一次相遇，已经悄悄安排。</view></view>
+    <view wx:if="{{total}}" class="session-stats"><view><text class="session-number serif">{{sessionCounts.unknown}}</text><text>不认识</text></view><view><text class="session-number serif">{{sessionCounts.unsure}}</text><text>不确定</text></view><view><text class="session-number serif">{{sessionCounts.known}}</text><text>认识</text></view></view>
+    <view wx:if="{{stats.nextDueAt}}" class="notice next-review">下次复习 · {{nextDueLabel}}<view wx:if="{{pending.count}}">{{pending.unknown}} 词不认识 · 约 5 分钟后，{{pending.unsure}} 词不确定 · 约 15 分钟后。</view><view wx:else>连续记住后，复习间隔会逐步延长。</view></view>
+    <view wx:if="{{stats.dueCount}}" class="due-now-hint">当前已有 {{stats.dueCount}} 词到期，可以继续复习。</view>
+    <button wx:if="{{(mode === 'today' && stats.todayRemaining) || (mode === 'review' && stats.dueCount)}}" class="primary complete-cta" bindtap="nextGroup">继续下一组 ↗</button><button class="{{(mode === 'today' && stats.todayRemaining) || (mode === 'review' && stats.dueCount) ? 'secondary' : 'primary'}} complete-cta" bindtap="home">回到学习首页</button><button wx:if="{{canUndo}}" class="link complete-undo" bindtap="undo">↶ 撤销上一词，重新判断</button>
+  </view>
+</view>

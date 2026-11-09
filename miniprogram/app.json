@@ -1,0 +1,16 @@
+{
+  "pages": ["pages/index/index", "pages/books/books", "pages/collections/collections", "pages/profile/profile", "pages/study/study", "pages/detail/detail"],
+  "window": { "navigationBarTitleText": "一词 OneWord", "navigationBarBackgroundColor": "#f6f5ef", "navigationBarTextStyle": "black", "backgroundColor": "#f6f5ef", "backgroundTextStyle": "dark" },
+  "tabBar": {
+    "color": "#8a9188", "selectedColor": "#244d3d", "backgroundColor": "#f6f5ef", "borderStyle": "white",
+    "list": [
+      { "pagePath": "pages/index/index", "text": "学习", "iconPath": "images/study.png", "selectedIconPath": "images/study-on.png" },
+      { "pagePath": "pages/books/books", "text": "词书", "iconPath": "images/books.png", "selectedIconPath": "images/books-on.png" },
+      { "pagePath": "pages/collections/collections", "text": "词集", "iconPath": "images/collection.png", "selectedIconPath": "images/collection-on.png" },
+      { "pagePath": "pages/profile/profile", "text": "我的", "iconPath": "images/profile.png", "selectedIconPath": "images/profile-on.png" }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}

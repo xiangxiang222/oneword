@@ -1,0 +1,1 @@
+{ "desc": "本地学习记录不被索引", "rules": [{ "action": "disallow", "page": "*" }] }

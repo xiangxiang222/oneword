@@ -1,0 +1,9 @@
+<view class="page">
+  <view class="eyebrow">WORDS THAT STAY WITH YOU</view><view class="title collection-title">每一词，都有去处。</view><view class="collection-subtitle">跟着记忆，自然流动。</view>
+  <view class="collection-tabs"><button wx:for="{{tabs}}" wx:key="id" class="collection-tab {{status === item.id ? 'tab-active' : ''}}" bindtap="tab" data-status="{{item.id}}"><text>{{item.label}}</text><text class="tab-count serif">{{counts[item.id] || 0}}</text></button></view>
+  <view class="collection-explanation">{{explanation}}</view>
+  <view class="search"><input placeholder="搜索单词或核心意思" value="{{query}}" bindinput="search" confirm-type="search" /></view>
+  <view class="between collection-heading"><text class="small muted">{{query ? '搜索到 ' + items.length + ' 词' : '全部词书 · ' + total + ' 词'}}</text><button wx:if="{{total}}" class="link" bindtap="practice">练一组 ↗</button></view>
+  <button wx:for="{{items}}" wx:key="id" class="word-row" bindtap="detail" data-id="{{item.id}}"><view class="grow"><view class="word-en">{{item.word}}</view><view class="word-zh">{{item.coreMeaning}}</view></view><view class="due-label">{{item.dueLabel}}</view><text class="arrow">›</text></button>
+  <view wx:if="{{!items.length}}" class="empty"><view class="empty-mark serif">{{query ? '?' : 'a—z'}}</view><view class="empty-title">{{query ? '这次没有找到' : '这里，等你来留下第一词'}}</view><view class="empty-copy">{{query ? '试试其他单词或中文意思。' : '学习时的每一次判断，都会自动归入这里。'}}</view><button wx:if="{{!query}}" class="secondary empty-cta" bindtap="learn">去认识一个新词 ↗</button></view>
+</view>

@@ -1,0 +1,9 @@
+{
+  "description": "一词 OneWord · 每次只记一个意思",
+  "miniprogramRoot": "./",
+  "compileType": "miniprogram",
+  "appid": "touristappid",
+  "projectname": "oneword",
+  "setting": { "es6": true, "enhance": true, "minified": true, "postcss": true, "urlCheck": true, "minifyWXSS": true, "minifyWXML": true },
+  "libVersion": "3.7.12"
+}
