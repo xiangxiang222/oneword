@@ -9,7 +9,9 @@
 - 无需注册，学习记录保存在设备；网页和微信支持兼容 JSON 备份恢复。
 - 9 本离线精选各 180 词；还可下载完整源标签词库后离线使用。小学、初中、高中、四级、六级、考研、雅思、托福、GRE。SAT 尚在整理，未假称已收录。
 
-网页：<https://togetherbetter.cn/oneword/>；仓库：<https://github.com/xiangxiang222/oneword>（私有）。
+网页已上线：<https://togetherbetter.cn/oneword/>；仓库：<https://github.com/xiangxiang222/oneword>（私有）。[产品 PR #1](https://github.com/xiangxiang222/oneword/pull/1) 已合并并自动部署，55 项测试与 14 组公网页面检查通过。
+
+[手机首页](docs/previews/home-mobile.png) · [学习词卡](docs/previews/study-mobile.png) · [词书页](docs/previews/books-mobile.png) · [桌面首页](docs/previews/home-desktop.png)
 
 ## 开发
 
